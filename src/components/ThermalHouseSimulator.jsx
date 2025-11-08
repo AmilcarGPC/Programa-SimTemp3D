@@ -211,57 +211,64 @@ const ThermalHouseSimulator = () => {
     const shadowWidth = 0.6; // Ancho de la sombra en los bordes
     const shadowOpacityEdge = 0.18; // Opacidad más fuerte en el borde pegado al muro
     const shadowOpacityEnd = 0.0; // Totalmente transparente al final
-    
+
     // Crear un plano de sombra DEL TAMAÑO DEL PISO INTERIOR
-    const shadowGeometry = new THREE.PlaneGeometry(
-      floorSize,
-      floorSize
-    );
-    
+    const shadowGeometry = new THREE.PlaneGeometry(floorSize, floorSize);
+
     // Crear un canvas para el gradiente de sombra en los bordes
-    const shadowCanvas = document.createElement('canvas');
+    const shadowCanvas = document.createElement("canvas");
     shadowCanvas.width = 512;
     shadowCanvas.height = 512;
-    const shadowCtx = shadowCanvas.getContext('2d');
-    
+    const shadowCtx = shadowCanvas.getContext("2d");
+
     // Fondo transparente
     shadowCtx.clearRect(0, 0, 512, 512);
-    
+
     // Calcular el ancho del gradiente en píxeles del canvas
     const gradientWidth = (shadowWidth / floorSize) * 512;
-    
+
     // Gradiente superior (desde arriba hacia abajo)
     const gradTop = shadowCtx.createLinearGradient(0, 0, 0, gradientWidth);
     gradTop.addColorStop(0, `rgba(0, 0, 0, ${shadowOpacityEdge})`);
     gradTop.addColorStop(1, `rgba(0, 0, 0, ${shadowOpacityEnd})`);
     shadowCtx.fillStyle = gradTop;
     shadowCtx.fillRect(0, 0, 512, gradientWidth);
-    
+
     // Gradiente inferior (desde abajo hacia arriba)
-    const gradBottom = shadowCtx.createLinearGradient(0, 512, 0, 512 - gradientWidth);
+    const gradBottom = shadowCtx.createLinearGradient(
+      0,
+      512,
+      0,
+      512 - gradientWidth
+    );
     gradBottom.addColorStop(0, `rgba(0, 0, 0, ${shadowOpacityEdge})`);
     gradBottom.addColorStop(1, `rgba(0, 0, 0, ${shadowOpacityEnd})`);
     shadowCtx.fillStyle = gradBottom;
     shadowCtx.fillRect(0, 512 - gradientWidth, 512, gradientWidth);
-    
+
     // Gradiente izquierdo (desde izquierda hacia derecha)
     const gradLeft = shadowCtx.createLinearGradient(0, 0, gradientWidth, 0);
     gradLeft.addColorStop(0, `rgba(0, 0, 0, ${shadowOpacityEdge})`);
     gradLeft.addColorStop(1, `rgba(0, 0, 0, ${shadowOpacityEnd})`);
     shadowCtx.fillStyle = gradLeft;
     shadowCtx.fillRect(0, 0, gradientWidth, 512);
-    
+
     // Gradiente derecho (desde derecha hacia izquierda)
-    const gradRight = shadowCtx.createLinearGradient(512, 0, 512 - gradientWidth, 0);
+    const gradRight = shadowCtx.createLinearGradient(
+      512,
+      0,
+      512 - gradientWidth,
+      0
+    );
     gradRight.addColorStop(0, `rgba(0, 0, 0, ${shadowOpacityEdge})`);
     gradRight.addColorStop(1, `rgba(0, 0, 0, ${shadowOpacityEnd})`);
     shadowCtx.fillStyle = gradRight;
     shadowCtx.fillRect(512 - gradientWidth, 0, gradientWidth, 512);
-    
+
     const shadowTexture = new THREE.CanvasTexture(shadowCanvas);
     shadowTexture.minFilter = THREE.LinearFilter; // Suavizar aún más
     shadowTexture.magFilter = THREE.LinearFilter;
-    
+
     const shadowMaterial = new THREE.MeshBasicMaterial({
       map: shadowTexture,
       transparent: true,
@@ -269,7 +276,7 @@ const ThermalHouseSimulator = () => {
       depthWrite: false,
       blending: THREE.MultiplyBlending,
     });
-    
+
     const contactShadow = new THREE.Mesh(shadowGeometry, shadowMaterial);
     contactShadow.rotation.x = -Math.PI / 2;
     contactShadow.position.y = 0.02; // Ligeramente sobre el suelo
