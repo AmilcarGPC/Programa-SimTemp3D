@@ -1,0 +1,91 @@
+.control-panel {
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 280px;
+  height: calc(100vh - 50px);
+  background-color: rgba(255, 255, 255, 0.95);
+  padding: 20px;
+  box-shadow: -2px 0 10px rgba(0, 0, 0, 0.1);
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+.control-panel__title {
+  margin: 0 0 20px 0;
+  font-size: 20px;
+  color: #333;
+}
+
+.control-panel__control-group {
+  margin-bottom: 25px;
+}
+
+.control-panel__label {
+  display: block;
+  margin-bottom: 8px;
+  color: #555;
+  font-size: 14px;
+}
+
+.control-panel__slider {
+  width: 100%;
+}
+
+.control-panel__actions {
+  margin-bottom: 15px;
+}
+
+.control-panel__button {
+  width: 100%;
+  padding: 12px;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  margin-bottom: 10px;
+  transition: opacity 0.2s;
+}
+
+.control-panel__button:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.control-panel__button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.control-panel__button--add-window {
+  background-color: #4caf50;
+}
+
+.control-panel__button--add-heater {
+  background-color: #ff9800;
+}
+
+.control-panel__button--reset {
+  background-color: #f44336;
+}
+
+.control-panel__info {
+  margin-top: 30px;
+  padding: 15px;
+  background-color: #f5f5f5;
+  border-radius: 4px;
+  font-size: 13px;
+  color: #666;
+}
+
+.control-panel__info p {
+  margin: 0 0 8px 0;
+}
+
+.control-panel__info p:last-child {
+  margin-bottom: 0;
+}
+
+.control-panel__info strong {
+  color: #333;
+}
