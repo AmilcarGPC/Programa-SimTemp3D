@@ -371,6 +371,7 @@ const ThermalHouseSimulator = () => {
           toggleDoor(draggedDoor, true); // true = instantáneo
         } else if (draggedDoor.userData.isDragging) {
           // Se movió -> actualizar posición en el estado para reconstruir paredes
+
           const newPos = snapToGrid({
             x: draggedDoor.position.x,
             z: draggedDoor.position.z,

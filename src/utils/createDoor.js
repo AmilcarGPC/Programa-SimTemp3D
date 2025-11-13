@@ -8,7 +8,7 @@ import { createWallMaterial } from "./createHouse";
  */
 export const DOOR_CONFIG = {
   width: 2.0, // Ancho de la puerta
-  height: 2.3, // Alto de la puerta
+  height: 2.5, // Alto de la puerta
   depth: HOUSE_CONFIG.wallThickness, // Profundidad = grosor del muro
   frameThickness: 0.1, // Grosor del marco
   doorThickness: 0.08, // Grosor de la tabla de la puerta
@@ -244,55 +244,48 @@ export const createDoor = (options) => {
 
   // Grupo pivotante para la puerta (rota sobre el eje Y en el borde DERECHO)
   const pivotGroup = new THREE.Group();
-  const { width, frameThickness, depth } = DOOR_CONFIG;
+  const { width, frameThickness } = DOOR_CONFIG;
 
-  // Offset para que el pivote esté en el borde DERECHO del marco
-  // Panel se extiende hacia la izquierda desde el pivote
-  const innerPanelWidth = width - frameThickness * 2;
-  panel.position.x = -innerPanelWidth / 2 - 0.025;
-  handle.position.x = -innerPanelWidth * 0.85;
+  // Ancho del panel para que quepa dentro del marco
+  const panelWidth = width - frameThickness * 2;
+  panel.geometry.dispose(); // Liberar memoria de la geometría anterior
+  panel.geometry = new THREE.BoxGeometry(
+    panelWidth,
+    panel.geometry.parameters.height,
+    panel.geometry.parameters.depth
+  );
+
+  // El panel se extiende hacia la izquierda desde el pivote (su borde derecho)
+  panel.position.x = -panelWidth / 2;
+
+  // Posicionar manija en el panel
+  handle.position.x = -panelWidth * 0.85;
   handle.position.y = 1.0; // Altura de la manija
 
-  // Posicionar el panel completamente DENTRO de la casa (Z negativo = interior)
-  // El panel debe estar pasando el marco interior, no visible desde afuera
-  // Cálculo: ir al borde interior del muro, pasar el marco, y centrar el panel
-  // Colocar el panel hacia la cara interior del muro (centrado en el grosor)
-  const panelOffset = depth / 2 - DOOR_CONFIG.doorThickness / 2 - 0.001;
-  panel.position.z = panelOffset;
-  handle.position.z = panelOffset;
-
+  // El panel y la manija están centrados en el eje Z (0) por defecto,
+  // lo que los alinea con el centro del marco.
   pivotGroup.add(panel, handle);
-  // Pivote en el borde derecho interno (ajustado a medio grosor de marco)
-  pivotGroup.position.x = width / 2 - frameThickness / 2;
+
+  // Posicionar el pivote en el borde derecho interno del marco
+  pivotGroup.position.x = width / 2 - frameThickness;
 
   doorGroup.add(frame, pivotGroup);
   doorGroup.userData.pivotGroup = pivotGroup;
 
-  // Posicionar y rotar la puerta según la dirección
-  // Ajustar la posición para centrar la puerta en el grosor del muro
-  const halfDepth = depth / 2;
-  let posX = position.x;
-  let posZ = position.z;
+  doorGroup.position.set(position.x, 0.15, position.z);
 
-  switch (direction) {
-    case DOOR_DIRECTIONS.NORTH:
-      posZ = position.z + halfDepth; // mover hacia el interior
-      break;
-    case DOOR_DIRECTIONS.SOUTH:
-      posZ = position.z - halfDepth; // mover hacia el interior
-      break;
-    case DOOR_DIRECTIONS.EAST:
-      posX = position.x - halfDepth; // mover hacia el interior
-      break;
-    case DOOR_DIRECTIONS.WEST:
-      posX = position.x + halfDepth; // mover hacia el interior
-      break;
-    default:
-      break;
+  // Añadir desplazamiento para alinear con el muro usando wallThickness dependiendo de si es norte, sur, este u oeste
+  if (direction === DOOR_DIRECTIONS.NORTH) {
+    doorGroup.position.z += HOUSE_CONFIG.wallThickness / 2;
+  } else if (direction === DOOR_DIRECTIONS.SOUTH) {
+    doorGroup.position.z -= HOUSE_CONFIG.wallThickness / 2;
+  } else if (direction === DOOR_DIRECTIONS.EAST) {
+    doorGroup.position.x -= HOUSE_CONFIG.wallThickness / 2;
+  } else if (direction === DOOR_DIRECTIONS.WEST) {
+    doorGroup.position.x += HOUSE_CONFIG.wallThickness / 2;
   }
 
-  // Elevar 0.15 unidades para que no colisione con el piso interior elevado
-  doorGroup.position.set(posX, 0.15, posZ);
+  // Posicionar y rotar la puerta según la dirección
   doorGroup.rotation.y = getDoorRotation(direction);
 
   return doorGroup;
@@ -442,7 +435,19 @@ export const updateDoorPosition = (doorGroup, newPosition) => {
     return false;
   }
 
+  // Añadir desplazamiento para alinear con el muro usando wallThickness dependiendo de si es norte, sur, este u oeste
   doorGroup.position.set(snappedPosition.x, 0, snappedPosition.z);
+
+  if (direction === DOOR_DIRECTIONS.NORTH) {
+    doorGroup.position.z += HOUSE_CONFIG.wallThickness / 2;
+  } else if (direction === DOOR_DIRECTIONS.SOUTH) {
+    doorGroup.position.z -= HOUSE_CONFIG.wallThickness / 2;
+  } else if (direction === DOOR_DIRECTIONS.EAST) {
+    doorGroup.position.x -= HOUSE_CONFIG.wallThickness / 2;
+  } else if (direction === DOOR_DIRECTIONS.WEST) {
+    doorGroup.position.x += HOUSE_CONFIG.wallThickness / 2;
+  }
+
   // Mantener misma elevación usada al crear la puerta (evita desalineado con el piso)
   doorGroup.position.y = 0.15;
   return true;
