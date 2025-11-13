@@ -1,0 +1,99 @@
+.context-menu-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 9998;
+  background: transparent;
+}
+
+.context-menu {
+  position: fixed;
+  background: rgba(255, 255, 255, 0.98);
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+  padding: 8px 0;
+  min-width: 200px;
+  z-index: 9999;
+  backdrop-filter: blur(10px);
+  animation: contextMenuFadeIn 0.15s ease-out;
+}
+
+@keyframes contextMenuFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.context-menu-header {
+  padding: 8px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.context-menu-divider {
+  height: 1px;
+  background: #e0e0e0;
+  margin: 4px 0;
+}
+
+.context-menu-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 14px;
+  color: #333;
+  text-align: left;
+  transition: all 0.15s ease;
+}
+
+.context-menu-item:hover:not(:disabled) {
+  background: rgba(76, 175, 80, 0.1);
+  color: #4caf50;
+}
+
+.context-menu-item:active:not(:disabled) {
+  background: rgba(76, 175, 80, 0.2);
+}
+
+.context-menu-item:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.context-menu-item.cancel {
+  color: #999;
+  margin-top: 4px;
+}
+
+.context-menu-item.cancel:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: #666;
+}
+
+.context-menu-icon {
+  font-size: 18px;
+  width: 24px;
+  text-align: center;
+}
+
+/* Animación de hover */
+.context-menu-item:not(:disabled):hover .context-menu-icon {
+  transform: scale(1.1);
+  transition: transform 0.2s ease;
+}

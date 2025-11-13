@@ -39,6 +39,8 @@ Raíz (principales archivos):
 ├─ vite.config.js
 ├─ index.html
 ├─ README.md
+├─ DOOR_README.md         # 🚪 Guía rápida del sistema de puertas
+├─ DOOR_SYSTEM.md         # 📖 Documentación completa de puertas
 └─ src/
 	 ├─ main.jsx            # Entrada React
 	 ├─ App.jsx             # Componente raíz
@@ -47,6 +49,8 @@ Raíz (principales archivos):
 	 │  ├─ Canvas3D.jsx
 	 │  ├─ ControlPanel.jsx
 	 │  ├─ MetricsBar.jsx
+	 │  ├─ DoorControl.jsx      # 🚪 Control de puertas
+	 │  ├─ DoorControl.css      # 🎨 Estilos del control
 	 │  └─ ThermalHouseSimulator.jsx
 	 ├─ hooks/              # Hooks personalizados para Three.js y lógica
 	 │  ├─ useThreeScene.js
@@ -54,12 +58,17 @@ Raíz (principales archivos):
 	 │  ├─ usePostProcessing.js
 	 │  ├─ useAnimationLoop.js
 	 │  ├─ useWindowResize.js
-	 │  └─ useThermalEffects.js
+	 │  ├─ useThermalEffects.js
+	 │  └─ useDoors.js          # 🚪 Hook de gestión de puertas
 	 ├─ utils/              # Helpers y creadores de geometría/recursos
 	 │  ├─ createGround.js
 	 │  ├─ createHouse.js
 	 │  ├─ createTree.js
+	 │  ├─ createDoor.js        # 🚪 Geometría y lógica de puertas
+	 │  ├─ doorExamples.js      # 📚 Ejemplos de uso de puertas
 	 │  └─ disposeUtils.js
+	 ├─ integration/        # APIs simplificadas
+	 │  └─ doorIntegration.js   # 🔧 DoorManager (API simplificada)
 	 └─ config/             # Configuración centralizada de la escena
 			└─ sceneConfig.js
 ```
@@ -107,12 +116,34 @@ Internals (hooks)
 
 - `src/config/sceneConfig.js`: parámetros globales (colores, tamaños, posiciones de árboles, UI_CONFIG). Mantener aquí los valores facilita ajustes globales.
 
+## 🚪 Sistema de Puertas (Nuevo)
+
+Se ha implementado un sistema completo de puertas low poly con las siguientes características:
+
+- **Diseño Low Poly**: Marco, tabla y manija con geometrías simples
+- **4 Direcciones**: Norte, Sur, Este, Oeste
+- **Validación Automática**: Evita esquinas y posiciones inválidas
+- **Animación Suave**: Apertura/cierre con interpolación
+- **Cortes CSG**: Aberturas perfectas en las paredes usando `three-bvh-csg`
+- **Interfaz Gráfica**: Panel de control integrado en `ControlPanel`
+- **Raycasting**: Colocación interactiva con clic del mouse
+
+**Documentación completa**: Ver [DOOR_README.md](./DOOR_README.md) y [DOOR_SYSTEM.md](./DOOR_SYSTEM.md)
+
+**Uso rápido**:
+
+1. Haz clic en "Colocar Puerta" en el panel de control
+2. Selecciona la dirección del muro
+3. Haz clic en una posición válida del muro
+4. Usa "Reconstruir Paredes" para aplicar los cortes
+
 ## Notas de diseño y mantenimiento
 
 - Separación de responsabilidades: la mayor parte de la lógica Three.js está aislada en `hooks/` y `utils/`, mientras que los componentes React manejan layout y estado de UI.
 - Recursos compartidos: `createTree` y `createGround` usan cache/recursos compartidos para reducir memoria y pausas por GC.
 - Limpieza robusta: se añadió `disposeUtils.js` y las limpiezas comprueban nulidad, evitando errores al desmontar.
 - Rendimiento: operaciones costosas como CSG o generación de texturas pueden bloquear el hilo principal; si experimentas jank, considera precomputar activos o mover operaciones a un WebWorker.
+- Sistema de puertas: Usa CSG para cortes en paredes (operación costosa). Reconstruye paredes solo cuando sea necesario.
 
 ## Cómo contribuir / probar cambios
 

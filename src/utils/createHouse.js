@@ -5,8 +5,9 @@ import { HOUSE_CONFIG, MATERIALS_CONFIG } from "../config/sceneConfig";
 /**
  * Crea el material para las paredes con el shader personalizado.
  * Se parametra con la altura de pared para evitar "magic numbers" en el shader.
+ * @export Para uso en createDoor.js al reconstruir materiales post-CSG
  */
-const createWallMaterial = (wallHeight) => {
+export const createWallMaterial = (wallHeight) => {
   const wallMaterial = new THREE.MeshStandardMaterial({
     roughness: MATERIALS_CONFIG.wall.roughness,
     metalness: MATERIALS_CONFIG.wall.metalness,
