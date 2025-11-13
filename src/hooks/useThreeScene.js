@@ -19,10 +19,10 @@ export const useThreeScene = (containerRef) => {
 
   // Detectar cuando el container está listo
   useEffect(() => {
-    if (containerRef.current && !isReady) {
+    if (containerRef && containerRef.current && !isReady) {
       setIsReady(true);
     }
-  });
+  }, [containerRef, isReady]);
 
   useEffect(() => {
     if (!isReady || !containerRef.current) {
@@ -82,7 +82,7 @@ export const useThreeScene = (containerRef) => {
       }
       newRenderer.dispose();
     };
-  }, [isReady]);
+  }, [isReady, containerRef]);
 
   return { scene, camera, renderer };
 };

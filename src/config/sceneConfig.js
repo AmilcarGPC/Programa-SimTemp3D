@@ -68,24 +68,36 @@ export const TREE_CONFIG = {
     radiusBottom: 0.4,
     height: 2,
     segments: 6,
-    color: 0x8b4513,
+    color: 0x5d4149,
   },
   foliage: {
     radius: 1.5,
     widthSegments: 8,
     heightSegments: 6,
-    color: 0x228b22,
+    color: 0x59853d,
     heightOffset: 3,
   },
 };
 
+// Posiciones de árboles organizadas en clusters en cada esquina.
+// Cada entrada puede incluir `scale` opcional para variar tamaño.
 export const TREE_POSITIONS = [
-  { x: -12, z: -12 },
-  { x: 12, z: -15 },
-  { x: -15, z: 12 },
-  { x: 13, z: 14 },
-  { x: -8, z: 16 },
-  { x: 15, z: -10 },
+  // Top-left corner cluster (closer to house corner at -5,-5)
+  { x: -6.3, z: -4, scale: 0.5 },
+  { x: -7.2, z: -5, scale: 0.85 },
+  { x: -4, z: -6.5, scale: 0.6 },
+
+  // Top-right corner cluster (closer to house corner at +5,-5)
+  { x: 6.3, z: -3.7, scale: 0.5 },
+  { x: 7, z: -4.8, scale: 0.9 },
+
+  // Bottom-left corner cluster (closer to house corner at -5,+5)
+  { x: -6.2, z: 4, scale: 0.6 },
+  { x: -7, z: 5.5, scale: 0.95 },
+
+  // Bottom-right corner cluster (closer to house corner at +5,+5) - smaller trees
+  { x: 4.5, z: 6.3, scale: 0.5 },
+  { x: 6.5, z: 6.5, scale: 0.73 },
 ];
 
 export const MATERIALS_CONFIG = {

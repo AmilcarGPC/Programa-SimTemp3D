@@ -11,6 +11,7 @@ import { useThermalEffects } from "../hooks/useThermalEffects";
 import { createGround } from "../utils/createGround";
 import { createTrees } from "../utils/createTree";
 import { createHouse } from "../utils/createHouse";
+import { disposeObject } from "../utils/disposeUtils";
 import { TREE_POSITIONS, UI_CONFIG } from "../config/sceneConfig";
 
 const ThermalHouseSimulator = () => {
@@ -38,7 +39,7 @@ const ThermalHouseSimulator = () => {
 
     // Crear y añadir el suelo
     const ground = createGround();
-    scene.add(ground);
+    if (ground) scene.add(ground);
 
     // Crear y añadir árboles
     const trees = createTrees(TREE_POSITIONS);
@@ -46,31 +47,34 @@ const ThermalHouseSimulator = () => {
 
     // Crear y añadir la casa
     const house = createHouse();
-    scene.add(house.floor);
-    scene.add(house.walls);
+    if (house.floor) scene.add(house.floor);
+    if (house.walls) scene.add(house.walls);
     house.markers.forEach((marker) => scene.add(marker));
 
     // Cleanup
     return () => {
-      scene.remove(ground);
-      trees.forEach((tree) => scene.remove(tree));
-      scene.remove(house.floor);
-      scene.remove(house.walls);
-      house.markers.forEach((marker) => scene.remove(marker));
+      // Remove from scene if present
+      try {
+        if (ground) scene.remove(ground);
+        trees.forEach((tree) => scene.remove(tree));
+        if (house.floor) scene.remove(house.floor);
+        if (house.walls) scene.remove(house.walls);
+        house.markers.forEach((marker) => scene.remove(marker));
 
-      // Liberar memoria
-      ground.geometry.dispose();
-      ground.material.dispose();
-      trees.forEach((tree) => {
-        tree.children.forEach((child) => {
-          child.geometry.dispose();
-          child.material.dispose();
+        // Liberar memoria con helper robusto
+        if (ground) disposeObject(ground);
+
+        trees.forEach((tree) => {
+          disposeObject(tree);
         });
-      });
-      house.floor.geometry.dispose();
-      house.floor.material.dispose();
-      house.walls.geometry.dispose();
-      house.walls.material.dispose();
+
+        if (house.floor) disposeObject(house.floor);
+        if (house.walls) disposeObject(house.walls);
+      } catch (e) {
+        // Evitar romper el unmount por cualquier error de limpieza
+        // eslint-disable-next-line no-console
+        console.warn("Cleanup error:", e);
+      }
     };
   }, [scene]);
 
@@ -86,6 +90,9 @@ const ThermalHouseSimulator = () => {
         position: "fixed",
         top: 0,
         left: 0,
+        // Inyectar variables CSS para mantener una sola fuente de verdad
+        ["--side-panel-width"]: `${UI_CONFIG.sidePanel.width}px`,
+        ["--footer-height"]: `${UI_CONFIG.footer.height}px`,
       }}
     >
       <Canvas3D ref={containerRef} />

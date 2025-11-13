@@ -4,7 +4,11 @@ import { GROUND_CONFIG, MATERIALS_CONFIG } from "../config/sceneConfig";
 /**
  * Crea una textura procedural con ruido para simular variación en el césped
  */
+let cachedGrassTexture = null;
+
 const createGrassTexture = () => {
+  if (cachedGrassTexture) return cachedGrassTexture;
+
   const { textureSize, noiseIntensity } = GROUND_CONFIG;
 
   const canvas = document.createElement("canvas");
@@ -12,11 +16,11 @@ const createGrassTexture = () => {
   canvas.height = textureSize;
   const ctx = canvas.getContext("2d");
 
-  // Color base blanco para aplicar noise
+  // Color base para césped
   ctx.fillStyle = "#82B14E";
   ctx.fillRect(0, 0, textureSize, textureSize);
 
-  // Añadir variación con noise
+  // Añadir variación con noise (simple y rápido)
   const imageData = ctx.getImageData(0, 0, textureSize, textureSize);
   const data = imageData.data;
 
@@ -34,7 +38,8 @@ const createGrassTexture = () => {
   texture.wrapT = THREE.RepeatWrapping;
   texture.repeat.set(GROUND_CONFIG.textureRepeat, GROUND_CONFIG.textureRepeat);
 
-  return texture;
+  cachedGrassTexture = texture;
+  return cachedGrassTexture;
 };
 
 /**

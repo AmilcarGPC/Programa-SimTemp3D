@@ -68,6 +68,7 @@ export const useLighting = (scene) => {
     scene.add(fillLight);
 
     // 5. Luces direccionales para iluminar paredes externas sin afectar interior
+    const exteriorTargets = [];
     if (LIGHTING_CONFIG.exterior) {
       LIGHTING_CONFIG.exterior.positions.forEach((pos) => {
         const exteriorLight = new THREE.DirectionalLight(
@@ -80,6 +81,7 @@ export const useLighting = (scene) => {
         lights.push(exteriorLight);
         scene.add(exteriorLight);
         scene.add(exteriorLight.target);
+        exteriorTargets.push(exteriorLight.target);
       });
     }
 
@@ -88,6 +90,14 @@ export const useLighting = (scene) => {
       lights.forEach((light) => {
         scene.remove(light);
         light.dispose?.();
+      });
+      // eliminar targets añadidos explícitamente
+      exteriorTargets.forEach((t) => {
+        try {
+          scene.remove(t);
+        } catch (e) {
+          // ignore
+        }
       });
     };
   }, [scene]);

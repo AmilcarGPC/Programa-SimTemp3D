@@ -3,6 +3,79 @@ import { SUBTRACTION, Brush, Evaluator } from "three-bvh-csg";
 import { HOUSE_CONFIG, MATERIALS_CONFIG } from "../config/sceneConfig";
 
 /**
+ * Crea el material para las paredes con el shader personalizado.
+ * Se parametra con la altura de pared para evitar "magic numbers" en el shader.
+ */
+const createWallMaterial = (wallHeight) => {
+  const wallMaterial = new THREE.MeshStandardMaterial({
+    roughness: MATERIALS_CONFIG.wall.roughness,
+    metalness: MATERIALS_CONFIG.wall.metalness,
+    side: THREE.DoubleSide,
+  });
+
+  wallMaterial.onBeforeCompile = (shader) => {
+    shader.uniforms.colorExterior = {
+      value: new THREE.Color(MATERIALS_CONFIG.wall.colorExterior),
+    };
+    shader.uniforms.colorInterior = {
+      value: new THREE.Color(MATERIALS_CONFIG.wall.colorInterior),
+    };
+    shader.uniforms.colorFloor = {
+      value: new THREE.Color(MATERIALS_CONFIG.floor.color),
+    };
+
+    // Usar la altura de pared para detectar techo/piso y centro
+    const ceilingThreshold = Math.max(0.5, wallHeight - 0.9);
+    const centerY = wallHeight / 2.0;
+
+    shader.vertexShader = shader.vertexShader.replace(
+      "#include <common>",
+      `#include <common>
+       varying vec3 vWorldPosition;
+       varying vec3 vWorldNormal;`
+    );
+
+    shader.vertexShader = shader.vertexShader.replace(
+      "#include <worldpos_vertex>",
+      `#include <worldpos_vertex>
+       vWorldPosition = worldPosition.xyz;
+       vWorldNormal = normalize((modelMatrix * vec4(normal, 0.0)).xyz);`
+    );
+
+    shader.fragmentShader = shader.fragmentShader.replace(
+      "#include <common>",
+      `#include <common>
+       uniform vec3 colorExterior;
+       uniform vec3 colorInterior;
+       uniform vec3 colorFloor;
+       varying vec3 vWorldPosition;
+       varying vec3 vWorldNormal;`
+    );
+
+    // Insertar thresholds calculadas en el shader como literales
+    shader.fragmentShader = shader.fragmentShader.replace(
+      "#include <color_fragment>",
+      `#include <color_fragment>
+       float isHorizontal = step(0.9, abs(vWorldNormal.y));
+       if (isHorizontal > 0.5) {
+         float isCeiling = step(${ceilingThreshold.toFixed(
+           3
+         )}, vWorldPosition.y);
+         diffuseColor.rgb = isCeiling > 0.5 ? colorExterior : colorFloor;
+       } else {
+         vec3 toCenter = normalize(vec3(0.0, ${centerY.toFixed(
+           3
+         )}, 0.0) - vWorldPosition);
+         float facing = dot(vWorldNormal, toCenter);
+         diffuseColor.rgb = facing < 0.0 ? colorExterior : colorInterior;
+       }`
+    );
+  };
+
+  return wallMaterial;
+};
+
+/**
  * Crea el piso de la casa
  * @returns {null} El piso está integrado en las paredes
  */
@@ -39,72 +112,8 @@ export const createWalls = () => {
   // Realizar sustracción: exterior - interior = paredes huecas CON PISO
   const wallsResult = evaluator.evaluate(outerBrush, innerBrush, SUBTRACTION);
 
-  // Material personalizado con shader que detecta orientación de normales
-  const wallMaterial = new THREE.MeshStandardMaterial({
-    roughness: MATERIALS_CONFIG.wall.roughness,
-    metalness: MATERIALS_CONFIG.wall.metalness,
-    side: THREE.DoubleSide,
-  });
-
-  // Shader personalizado para colorear según orientación y posición (piso vs paredes)
-  wallMaterial.onBeforeCompile = (shader) => {
-    // Agregar uniforms para los colores
-    shader.uniforms.colorExterior = {
-      value: new THREE.Color(MATERIALS_CONFIG.wall.colorExterior),
-    };
-    shader.uniforms.colorInterior = {
-      value: new THREE.Color(MATERIALS_CONFIG.wall.colorInterior),
-    };
-    shader.uniforms.colorFloor = {
-      value: new THREE.Color(MATERIALS_CONFIG.floor.color),
-    };
-
-    // Agregar varying para pasar la posición del mundo
-    shader.vertexShader = shader.vertexShader.replace(
-      "#include <common>",
-      `#include <common>
-       varying vec3 vWorldPosition;
-       varying vec3 vWorldNormal;`
-    );
-
-    shader.vertexShader = shader.vertexShader.replace(
-      "#include <worldpos_vertex>",
-      `#include <worldpos_vertex>
-       vWorldPosition = worldPosition.xyz;
-       vWorldNormal = normalize((modelMatrix * vec4(normal, 0.0)).xyz);`
-    );
-
-    // Modificar el fragment shader
-    shader.fragmentShader = shader.fragmentShader.replace(
-      "#include <common>",
-      `#include <common>
-       uniform vec3 colorExterior;
-       uniform vec3 colorInterior;
-       uniform vec3 colorFloor;
-       varying vec3 vWorldPosition;
-       varying vec3 vWorldNormal;`
-    );
-
-    shader.fragmentShader = shader.fragmentShader.replace(
-      "#include <color_fragment>",
-      `#include <color_fragment>
-       // Detectar superficies horizontales (piso o techo) por su normal
-       float isHorizontal = step(0.9, abs(vWorldNormal.y));
-       
-       if (isHorizontal > 0.5) {
-         // Es una superficie horizontal - determinar si es piso o techo por posición Y
-         // El piso está cerca de y=0, el techo está cerca de y=3
-         float isCeiling = step(2.0, vWorldPosition.y);
-         diffuseColor.rgb = isCeiling > 0.5 ? colorExterior : colorFloor;
-       } else {
-         // Es una pared - calcular si es exterior o interior
-         vec3 toCenter = normalize(vec3(0.0, 1.5, 0.0) - vWorldPosition);
-         float facing = dot(vWorldNormal, toCenter);
-         diffuseColor.rgb = facing < 0.0 ? colorExterior : colorInterior;
-       }`
-    );
-  };
-
+  // Crear material de muro usando helper (usa wallHeight para thresholds)
+  const wallMaterial = createWallMaterial(wallHeight);
   wallsResult.material = wallMaterial;
   wallsResult.castShadow = false;
   wallsResult.receiveShadow = true;

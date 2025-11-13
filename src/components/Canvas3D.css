@@ -1,6 +1,6 @@
 .canvas-3d {
-  width: calc(100vw - 280px);
-  height: calc(100vh - 50px);
+  width: calc(100vw - var(--side-panel-width, 280px));
+  height: calc(100vh - var(--footer-height, 50px));
   position: absolute;
   left: 0;
   top: 0;
