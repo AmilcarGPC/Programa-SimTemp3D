@@ -1,11 +1,11 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import {
   createDoor,
   applyDoorCutouts,
   updateDoorAnimation,
   toggleDoor,
-  isValidDoorPosition,
 } from "../utils/createDoor";
+import { isValidDoorPosition } from "../utils/doorUtils";
 
 /**
  * Hook personalizado para gestionar el sistema de puertas
@@ -17,6 +17,9 @@ export const useDoors = (scene, wallsMesh) => {
   const [doors, setDoors] = useState([]);
   const [placementMode, setPlacementMode] = useState(false);
   const [selectedDirection, setSelectedDirection] = useState("north");
+  // Mantener una colección rápida de referencias a los objetos 3D de las puertas
+  // para no iterar `scene.children` cada frame.
+  const doorObjectsRef = useRef(new Map());
 
   /**
    * Añade una nueva puerta en la posición especificada
@@ -68,6 +71,13 @@ export const useDoors = (scene, wallsMesh) => {
 
       // Añadir a la escena
       scene.add(doorObject);
+      // Guardar referencia para actualizaciones rápidas (animación, toggles)
+      try {
+        doorObjectsRef.current.set(doorId, doorObject);
+      } catch (e) {
+        // defensivo: si algo sale mal, no rompemos la creación
+        console.warn("useDoors: no se pudo registrar doorObject en map", e);
+      }
       console.log("✅ Puerta añadida a la escena");
 
       // Actualizar estado
@@ -93,6 +103,11 @@ export const useDoors = (scene, wallsMesh) => {
 
       if (doorObject) {
         scene.remove(doorObject);
+      }
+
+      // Eliminar referencia rápida si existe
+      if (doorObjectsRef.current.has(doorId)) {
+        doorObjectsRef.current.delete(doorId);
       }
 
       // Actualizar estado (esto disparará useEffect para reconstruir paredes)
@@ -121,10 +136,12 @@ export const useDoors = (scene, wallsMesh) => {
     (doorId) => {
       if (!scene) return;
 
-      const doorObject = scene.children.find(
-        (child) =>
-          child.userData.type === "door" && child.userData.id === doorId
-      );
+      const doorObject =
+        doorObjectsRef.current.get(doorId) ||
+        scene.children.find(
+          (child) =>
+            child.userData.type === "door" && child.userData.id === doorId
+        );
 
       if (doorObject) {
         toggleDoor(doorObject);
@@ -137,13 +154,17 @@ export const useDoors = (scene, wallsMesh) => {
    * Actualiza las animaciones de todas las puertas
    */
   const updateAnimations = useCallback(() => {
-    if (!scene) return;
-
-    scene.children.forEach((child) => {
-      if (child.userData.type === "door") {
-        updateDoorAnimation(child);
+    // Iterar sólo las puertas registradas para mejorar performance
+    const map = doorObjectsRef.current;
+    if (map && map.size > 0) {
+      for (const doorObj of map.values()) {
+        try {
+          updateDoorAnimation(doorObj);
+        } catch (e) {
+          console.warn("useDoors: fallo al actualizar animación de puerta", e);
+        }
       }
-    });
+    }
   }, [scene]);
 
   /**
@@ -169,11 +190,17 @@ export const useDoors = (scene, wallsMesh) => {
     if (!scene) return;
 
     // Eliminar todas las puertas de la escena
-    const doorObjects = scene.children.filter(
-      (child) => child.userData.type === "door"
-    );
+    // Usar el map para eliminar de forma segura
+    doorObjectsRef.current.forEach((doorObj) => {
+      try {
+        scene.remove(doorObj);
+      } catch (e) {
+        console.warn("useDoors: error al eliminar puerta del scene", e);
+      }
+    });
 
-    doorObjects.forEach((door) => scene.remove(door));
+    // Limpiar map
+    doorObjectsRef.current.clear();
 
     // Limpiar estado
     setDoors([]);

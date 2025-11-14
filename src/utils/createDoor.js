@@ -1,31 +1,21 @@
 import * as THREE from "three";
 import { SUBTRACTION, Brush, Evaluator } from "three-bvh-csg";
-import { HOUSE_CONFIG } from "../config/sceneConfig";
+import { HOUSE_CONFIG, DOOR_CONFIG } from "../config/sceneConfig";
 import { createWallMaterial } from "./createHouse";
+import {
+  DOOR_DIRECTIONS,
+  isValidDoorPosition,
+  getDoorRotation,
+  snapToGrid,
+  updateDoorPosition,
+} from "./doorUtils";
 
-/**
- * Configuración de la puerta
- */
-export const DOOR_CONFIG = {
-  width: 2.0, // Ancho de la puerta
-  height: 2.5, // Alto de la puerta
-  depth: HOUSE_CONFIG.wallThickness, // Profundidad = grosor del muro
-  frameThickness: 0.1, // Grosor del marco
-  doorThickness: 0.08, // Grosor de la tabla de la puerta
-  handleSize: 0.15, // Tamaño de la manija
-  openAngle: Math.PI / 2, // +90 grados para abrir hacia adentro (pivote en lado derecho)
-  animationSpeed: 0.05, // Velocidad de apertura/cierre
-};
+// DOOR_CONFIG ahora se exporta desde `src/config/sceneConfig.js`
 
 /**
  * Direcciones válidas para las puertas (N, S, E, W)
  */
-export const DOOR_DIRECTIONS = {
-  NORTH: "north", // Pared frontal (z negativo)
-  SOUTH: "south", // Pared trasera (z positivo)
-  EAST: "east", // Pared derecha (x positivo)
-  WEST: "west", // Pared izquierda (x negativo)
-};
+// DOOR_DIRECTIONS y utilidades relacionadas se encuentran ahora en `utils/doorUtils.js`
 
 /**
  * Crea el marco de la puerta (low poly).
@@ -156,63 +146,9 @@ const createDoorCutout = () => {
   return cutoutBrush;
 };
 
-/**
- * Valida si una posición es válida para colocar una puerta
- * @param {Object} position - { x, z, direction }
- * @returns {boolean}
- */
-export const isValidDoorPosition = (position) => {
-  const { x, z, direction } = position;
-  const { size } = HOUSE_CONFIG;
-  const halfSize = size / 2;
-  const tolerance = 0.1;
+// `isValidDoorPosition` moved to `utils/doorUtils.js`
 
-  // Verificar que la posición esté en un muro válido
-  switch (direction) {
-    case DOOR_DIRECTIONS.NORTH:
-      // Muro frontal: z ≈ -halfSize, x entre -halfSize y +halfSize (excluyendo esquinas)
-      const isZValid = Math.abs(z + halfSize) < tolerance;
-      const isXValid = x > -halfSize + 1 && x < halfSize - 1;
-      return isZValid && isXValid;
-
-    case DOOR_DIRECTIONS.SOUTH:
-      // Muro trasero: z ≈ halfSize, x entre -halfSize y +halfSize (excluyendo esquinas)
-      return (
-        Math.abs(z - halfSize) < tolerance &&
-        x > -halfSize + 1 &&
-        x < halfSize - 1
-      );
-
-    case DOOR_DIRECTIONS.EAST:
-      // Muro derecho: x ≈ halfSize, z entre -halfSize y +halfSize (excluyendo esquinas)
-      return Math.abs(x - halfSize) < tolerance && Math.abs(z) < halfSize - 1;
-
-    case DOOR_DIRECTIONS.WEST:
-      // Muro izquierdo: x ≈ -halfSize, z entre -halfSize y +halfSize (excluyendo esquinas)
-      return Math.abs(x + halfSize) < tolerance && Math.abs(z) < halfSize - 1;
-
-    default:
-      return false;
-  }
-};
-
-/**
- * Obtiene la rotación correcta según la dirección del muro
- */
-const getDoorRotation = (direction) => {
-  switch (direction) {
-    case DOOR_DIRECTIONS.NORTH:
-      return 0; // Mirando hacia +Z
-    case DOOR_DIRECTIONS.SOUTH:
-      return Math.PI; // Mirando hacia -Z
-    case DOOR_DIRECTIONS.EAST:
-      return -Math.PI / 2; // Mirando hacia -X
-    case DOOR_DIRECTIONS.WEST:
-      return Math.PI / 2; // Mirando hacia +X
-    default:
-      return 0;
-  }
-};
+// `getDoorRotation` moved to `utils/doorUtils.js`
 
 /**
  * Crea una puerta completa con frame, panel y manija
@@ -374,13 +310,18 @@ export const applyDoorCutouts = (wallsMesh, doorPositions) => {
  * @param {THREE.Group} doorGroup - El grupo de la puerta
  */
 export const updateDoorAnimation = (doorGroup) => {
-  const { pivotGroup, currentAngle, targetAngle, isOpen } = doorGroup.userData;
+  if (!doorGroup || !doorGroup.userData) return;
+
+  const { pivotGroup, currentAngle = 0, targetAngle = 0 } = doorGroup.userData;
+
+  if (!pivotGroup) return;
 
   if (Math.abs(currentAngle - targetAngle) > 0.01) {
     const diff = targetAngle - currentAngle;
-    const step = Math.sign(diff) * DOOR_CONFIG.animationSpeed;
+    const step = Math.sign(diff) * (DOOR_CONFIG.animationSpeed || 0.05);
 
-    doorGroup.userData.currentAngle += step;
+    doorGroup.userData.currentAngle =
+      (doorGroup.userData.currentAngle || 0) + step;
 
     if (Math.abs(doorGroup.userData.currentAngle - targetAngle) < 0.01) {
       doorGroup.userData.currentAngle = targetAngle;
@@ -396,6 +337,8 @@ export const updateDoorAnimation = (doorGroup) => {
  * @param {boolean} instant - Si es true, cambia sin animación
  */
 export const toggleDoor = (doorGroup, instant = false) => {
+  if (!doorGroup || !doorGroup.userData) return;
+
   doorGroup.userData.isOpen = !doorGroup.userData.isOpen;
   doorGroup.userData.targetAngle = doorGroup.userData.isOpen
     ? DOOR_CONFIG.openAngle
@@ -407,48 +350,6 @@ export const toggleDoor = (doorGroup, instant = false) => {
   }
 };
 
-/**
- * Redondea una posición a valores enteros (snap to grid)
- * @param {Object} position - { x, z }
- * @returns {Object} Posición redondeada
- */
-export const snapToGrid = (position) => {
-  return {
-    x: Math.round(position.x),
-    z: Math.round(position.z),
-  };
-};
+// `snapToGrid` moved to `utils/doorUtils.js`
 
-/**
- * Actualiza la posición de una puerta manteniendo la dirección
- * @param {THREE.Group} doorGroup
- * @param {Object} newPosition - { x, z }
- * @returns {boolean} true si la posición es válida
- */
-export const updateDoorPosition = (doorGroup, newPosition) => {
-  const direction = doorGroup.userData.direction;
-
-  // Snap a valores enteros
-  const snappedPosition = snapToGrid(newPosition);
-
-  if (!isValidDoorPosition({ ...snappedPosition, direction })) {
-    return false;
-  }
-
-  // Añadir desplazamiento para alinear con el muro usando wallThickness dependiendo de si es norte, sur, este u oeste
-  doorGroup.position.set(snappedPosition.x, 0, snappedPosition.z);
-
-  if (direction === DOOR_DIRECTIONS.NORTH) {
-    doorGroup.position.z += HOUSE_CONFIG.wallThickness / 2;
-  } else if (direction === DOOR_DIRECTIONS.SOUTH) {
-    doorGroup.position.z -= HOUSE_CONFIG.wallThickness / 2;
-  } else if (direction === DOOR_DIRECTIONS.EAST) {
-    doorGroup.position.x -= HOUSE_CONFIG.wallThickness / 2;
-  } else if (direction === DOOR_DIRECTIONS.WEST) {
-    doorGroup.position.x += HOUSE_CONFIG.wallThickness / 2;
-  }
-
-  // Mantener misma elevación usada al crear la puerta (evita desalineado con el piso)
-  doorGroup.position.y = 0.15;
-  return true;
-};
+// `updateDoorPosition` moved to `utils/doorUtils.js`

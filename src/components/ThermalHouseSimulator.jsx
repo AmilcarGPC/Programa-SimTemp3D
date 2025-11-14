@@ -11,16 +11,17 @@ import { useWindowResize } from "../hooks/useWindowResize";
 import { useAnimationLoop } from "../hooks/useAnimationLoop";
 import { useThermalEffects } from "../hooks/useThermalEffects";
 import { useDoors } from "../hooks/useDoors";
+import { useWindows } from "../hooks/useWindows";
 import { createGround } from "../utils/createGround";
 import { createTrees } from "../utils/createTree";
 import { createHouse } from "../utils/createHouse";
-import {
-  applyDoorCutouts,
-  toggleDoor,
-  updateDoorPosition,
-  snapToGrid,
-} from "../utils/createDoor";
+import { applyDoorCutouts, toggleDoor } from "../utils/createDoor";
+import { applyWindowCutouts, toggleWindow } from "../utils/createWindow";
+import { updateDoorPosition, snapToGrid } from "../utils/doorUtils";
+import { updateWindowPosition } from "../utils/windowUtils";
 import { disposeObject } from "../utils/disposeUtils";
+import { isDoorWindowOverlapping } from "../utils/overlapUtils";
+import { WINDOW_CONFIG } from "../config/sceneConfig";
 import { TREE_POSITIONS, UI_CONFIG, HOUSE_CONFIG } from "../config/sceneConfig";
 import { Brush, Evaluator, SUBTRACTION } from "three-bvh-csg";
 
@@ -60,6 +61,17 @@ const ThermalHouseSimulator = () => {
     updateDoorPositionInState,
     clearAllDoors,
   } = useDoors(scene, wallsMeshRef);
+
+  // Hook para gestionar ventanas
+  const {
+    windows,
+    addWindow,
+    removeWindow: removeWindowFn,
+    toggleWindowState,
+    updateWindowPositionInState,
+    rebuildWalls: rebuildWindowWalls,
+    clearAllWindows,
+  } = useWindows(scene, wallsMeshRef);
 
   // Inicializar la escena con objetos 3D
   useEffect(() => {
@@ -230,26 +242,37 @@ const ThermalHouseSimulator = () => {
       mouse.set(coords.x, coords.y);
       raycaster.setFromCamera(mouse, camera);
 
-      // Detectar clic en puerta
-      const doorObjects = scene.children.filter(
-        (child) => child.userData.type === "door"
+      // Detectar clic en objeto interactivo (puerta o ventana)
+      const interactiveObjects = scene.children.filter(
+        (child) =>
+          child.userData &&
+          (child.userData.type === "door" || child.userData.type === "window")
       );
 
-      const intersects = raycaster.intersectObjects(doorObjects, true);
+      const intersects = raycaster.intersectObjects(interactiveObjects, true);
 
       if (intersects.length > 0) {
-        let doorGroup = intersects[0].object;
+        let group = intersects[0].object;
 
-        // Buscar el grupo padre que es la puerta
-        while (doorGroup && doorGroup.userData.type !== "door") {
-          doorGroup = doorGroup.parent;
+        // Buscar el grupo padre que es la entidad (door/window)
+        while (
+          group &&
+          !(
+            group.userData &&
+            (group.userData.type === "door" || group.userData.type === "window")
+          )
+        ) {
+          group = group.parent;
         }
 
-        if (doorGroup && doorGroup.userData.type === "door") {
+        if (
+          group &&
+          (group.userData.type === "door" || group.userData.type === "window")
+        ) {
           // Guardar para drag
           dragStartPos.current = { x: event.clientX, y: event.clientY };
-          doorGroup.userData.isDragging = undefined; // Reset flag
-          setDraggedDoor(doorGroup);
+          group.userData.isDragging = undefined; // Reset flag
+          setDraggedDoor(group);
 
           // Cambiar cursor
           container.style.cursor = "grabbing";
@@ -289,18 +312,24 @@ const ThermalHouseSimulator = () => {
           draggedDoor.userData.isDragging = true;
 
           // Quitar los cortes mientras se arrastra
-          if (wallsMeshRef && doors.length > 0) {
+          if (wallsMeshRef) {
             scene.remove(wallsMeshRef);
             disposeObject(wallsMeshRef);
 
             const house = createHouse();
-            const tempWalls =
-              doors.length > 1
-                ? applyDoorCutouts(
-                    house.walls,
-                    doors.filter((d) => d.id !== draggedDoor.userData.id)
-                  )
-                : house.walls;
+
+            const remainingDoors = doors.filter(
+              (d) => d.id !== draggedDoor.userData.id
+            );
+            const remainingWindows = windows.filter(
+              (w) => w.id !== draggedDoor.userData.id
+            );
+
+            let tempWalls = house.walls;
+            if (remainingDoors.length > 0)
+              tempWalls = applyDoorCutouts(tempWalls, remainingDoors);
+            if (remainingWindows.length > 0)
+              tempWalls = applyWindowCutouts(tempWalls, remainingWindows);
 
             scene.add(tempWalls);
             setWallsMeshRef(tempWalls);
@@ -352,7 +381,11 @@ const ThermalHouseSimulator = () => {
               break;
           }
 
-          updateDoorPosition(draggedDoor, newPosition);
+          if (draggedDoor.userData.type === "door") {
+            updateDoorPosition(draggedDoor, newPosition);
+          } else if (draggedDoor.userData.type === "window") {
+            updateWindowPosition(draggedDoor, newPosition);
+          }
         }
       }
     };
@@ -366,17 +399,75 @@ const ThermalHouseSimulator = () => {
         const dy = event.clientY - dragStartPos.current.y;
         const distance = Math.sqrt(dx * dx + dy * dy);
 
-        // Si no se movió, es un clic -> toggle puerta
+        // Si no se movió, es un clic -> toggle (puerta o ventana)
         if (distance < 5) {
-          toggleDoor(draggedDoor, true); // true = instantáneo
+          if (draggedDoor.userData.type === "door") {
+            toggleDoor(draggedDoor, true);
+          } else if (draggedDoor.userData.type === "window") {
+            toggleWindow(draggedDoor, true);
+          }
         } else if (draggedDoor.userData.isDragging) {
           // Se movió -> actualizar posición en el estado para reconstruir paredes
-
           const newPos = snapToGrid({
             x: draggedDoor.position.x,
             z: draggedDoor.position.z,
           });
-          updateDoorPositionInState(draggedDoor.userData.id, newPos);
+          if (draggedDoor.userData.type === "door") {
+            const candidate = {
+              position: newPos,
+              direction: draggedDoor.userData.direction,
+            };
+            const conflict = windows.some((w) =>
+              isDoorWindowOverlapping(candidate, w)
+            );
+            if (conflict) {
+              console.warn(
+                "Movimiento inválido: la puerta solapa con una ventana"
+              );
+              // revertir a la posición anterior usando los helpers (actualiza escena + estado)
+              const prev = doors.find((d) => d.id === draggedDoor.userData.id);
+              if (prev) {
+                updateDoorPosition(draggedDoor, {
+                  x: prev.position.x,
+                  z: prev.position.z,
+                });
+                updateDoorPositionInState(
+                  draggedDoor.userData.id,
+                  prev.position
+                );
+              }
+            } else {
+              updateDoorPositionInState(draggedDoor.userData.id, newPos);
+            }
+          } else if (draggedDoor.userData.type === "window") {
+            const candidate = {
+              position: newPos,
+              direction: draggedDoor.userData.direction,
+            };
+            const conflict = doors.some((d) =>
+              isDoorWindowOverlapping(d, candidate)
+            );
+            if (conflict) {
+              console.warn(
+                "Movimiento inválido: la ventana solapa con una puerta"
+              );
+              const prev = windows.find(
+                (w) => w.id === draggedDoor.userData.id
+              );
+              if (prev) {
+                updateWindowPosition(draggedDoor, {
+                  x: prev.position.x,
+                  z: prev.position.z,
+                });
+                updateWindowPositionInState(
+                  draggedDoor.userData.id,
+                  prev.position
+                );
+              }
+            } else {
+              updateWindowPositionInState(draggedDoor.userData.id, newPos);
+            }
+          }
         }
       }
 
@@ -408,12 +499,13 @@ const ThermalHouseSimulator = () => {
     draggedDoor,
     wallsMeshRef,
     doors,
+    windows,
     contextMenu,
   ]);
 
   // Manejar reconstrucción de paredes con cortes de puertas
   const handleRebuildWalls = () => {
-    if (!scene || !wallsMeshRef || doors.length === 0) return;
+    if (!scene || !wallsMeshRef) return;
 
     // Remover paredes antiguas
     scene.remove(wallsMeshRef);
@@ -421,7 +513,13 @@ const ThermalHouseSimulator = () => {
 
     // Crear paredes nuevas
     const house = createHouse();
-    const newWalls = applyDoorCutouts(house.walls, doors);
+    let newWalls = house.walls;
+    if (doors && doors.length > 0) {
+      newWalls = applyDoorCutouts(newWalls, doors);
+    }
+    if (windows && windows.length > 0) {
+      newWalls = applyWindowCutouts(newWalls, windows);
+    }
 
     // Añadir a la escena
     scene.add(newWalls);
@@ -433,9 +531,39 @@ const ThermalHouseSimulator = () => {
     if (!contextMenu) return;
 
     if (componentType === "door") {
+      const candidate = {
+        position: contextMenu.wallPosition,
+        direction: contextMenu.direction,
+      };
+      // comprobar solapamiento con ventanas existentes
+      const conflict = windows.some((w) =>
+        isDoorWindowOverlapping(candidate, w)
+      );
+      if (conflict) {
+        console.warn(
+          "No se puede añadir la puerta: solapa con una ventana existente"
+        );
+        return;
+      }
       const door = addDoor(contextMenu.wallPosition, contextMenu.direction);
       if (door) {
         console.log("🚪 Puerta añadida desde menú contextual");
+      }
+    } else if (componentType === "window") {
+      const candidate = {
+        position: contextMenu.wallPosition,
+        direction: contextMenu.direction,
+      };
+      const conflict = doors.some((d) => isDoorWindowOverlapping(d, candidate));
+      if (conflict) {
+        console.warn(
+          "No se puede añadir la ventana: solapa con una puerta existente"
+        );
+        return;
+      }
+      const win = addWindow(contextMenu.wallPosition, contextMenu.direction);
+      if (win) {
+        console.log("🪟 Ventana añadida desde menú contextual");
       }
     }
   };
@@ -451,14 +579,20 @@ const ThermalHouseSimulator = () => {
     // Crear paredes nuevas
     const house = createHouse();
 
-    // Si hay puertas, aplicar cortes CSG
-    const newWalls =
-      doors.length > 0 ? applyDoorCutouts(house.walls, doors) : house.walls; // Sin puertas, usar paredes originales
+    // Si hay puertas o ventanas, aplicar cortes CSG
+    let newWalls = house.walls;
+    if (doors.length > 0) {
+      newWalls = applyDoorCutouts(newWalls, doors);
+    }
+    if (windows && windows.length > 0) {
+      // aplicar cortes de ventanas sobre el resultado
+      newWalls = applyWindowCutouts(newWalls, windows);
+    }
 
     // Añadir a la escena
     scene.add(newWalls);
     setWallsMeshRef(newWalls);
-  }, [doors, scene]);
+  }, [doors, windows, scene]);
 
   return (
     <div

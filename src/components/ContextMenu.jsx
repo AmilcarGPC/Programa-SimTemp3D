@@ -52,7 +52,10 @@ const ContextMenu = ({ position, onClose, onSelectComponent }) => {
           <span>Puerta</span>
         </button>
 
-        <button className="context-menu-item" disabled title="Próximamente">
+        <button
+          className="context-menu-item"
+          onClick={() => handleSelect("window")}
+        >
           <span className="context-menu-icon">🪟</span>
           <span>Ventana</span>
         </button>

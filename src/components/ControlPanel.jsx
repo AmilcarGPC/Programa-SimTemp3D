@@ -1,6 +1,7 @@
 import React from "react";
 import { UI_CONFIG } from "../config/sceneConfig";
 import DoorControl from "./DoorControl";
+import WindowControl from "./WindowControl";
 import "./ControlPanel.css";
 
 /**
@@ -12,6 +13,7 @@ const ControlPanel = ({
   onTempExternaChange,
   onTempInternaChange,
   doorControlProps,
+  windowControlProps,
 }) => {
   const { external, internal } = UI_CONFIG.temperature;
 
@@ -51,6 +53,7 @@ const ControlPanel = ({
 
       {/* Control de puertas */}
       {doorControlProps && <DoorControl {...doorControlProps} />}
+      {windowControlProps && <WindowControl {...windowControlProps} />}
 
       {/* Botones de acción */}
       <div className="control-panel__actions">
