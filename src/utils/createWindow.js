@@ -260,6 +260,26 @@ class WindowEntity extends EntityBase {
       }
     };
   }
+
+  // Validación local de posición (grid). Devuelve true si la posición es válida.
+  validatePosition(world = null, basePos = null) {
+    const pos = basePos ||
+      this.userData.basePosition || { x: this.position.x, z: this.position.z };
+    return isValidWindowPosition({
+      x: pos.x,
+      z: pos.z,
+      direction: this.userData.direction,
+    });
+  }
+
+  // Ajustes al mover: delegar al helper para aplicar offsets (sillHeight, wallThickness)
+  onMove(oldBase, newBase, opts = {}) {
+    try {
+      updateWindowPosition(this, { x: newBase.x, z: newBase.z });
+    } catch (e) {
+      // ignore
+    }
+  }
 }
 
 export const createWindow = ({ position, direction, id } = {}) => {

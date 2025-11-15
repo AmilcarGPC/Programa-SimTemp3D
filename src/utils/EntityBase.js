@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { disposeObject } from "./disposeUtils";
+import { snapToGrid } from "./doorUtils";
 
 /**
  * Clase base para entidades 3D (puertas, ventanas, calefactores, etc.)
@@ -24,6 +25,13 @@ export class EntityBase extends THREE.Group {
 
     if (position)
       this.position.set(position.x || 0, position.y || 0, position.z || 0);
+
+    // Track base position (aligned to wall grid) separate from world position
+    this.userData.basePosition = position
+      ? { x: position.x, z: position.z }
+      : null;
+    this._prevBasePosition = null;
+    this._validator = null; // external validator function (entity, world) => boolean
   }
 
   // Alterna el estado básico; subclasses pueden sobreescribir onToggle
@@ -42,6 +50,66 @@ export class EntityBase extends THREE.Group {
     // noop por defecto
   }
 
+  // Movimiento/validación básica
+  setValidator(fn) {
+    this._validator = fn;
+  }
+
+  // Devuelve true por defecto; subclasses pueden override para validaciones locales
+  validatePosition(world = null, basePos = null) {
+    return true;
+  }
+
+  // Mueve la entidad a una nueva posición (base grid). Devuelve true si aceptado.
+  moveTo(
+    newPos,
+    { snap = true, validate = true, world = null, instant = false } = {}
+  ) {
+    const snapped = snap ? snapToGrid(newPos) : { x: newPos.x, z: newPos.z };
+    const oldBase = this.userData.basePosition
+      ? { ...this.userData.basePosition }
+      : { x: this.position.x, z: this.position.z };
+
+    // Run validator if provided
+    if (validate) {
+      if (typeof this._validator === "function") {
+        const ok = this._validator(this, { world, basePosition: snapped });
+        if (!ok) return false;
+      } else {
+        const ok = this.validatePosition(world, snapped);
+        if (!ok) return false;
+      }
+    }
+
+    // Commit base position and set world position temporarily to base
+    this._prevBasePosition = oldBase;
+    this.userData.basePosition = { x: snapped.x, z: snapped.z };
+    this.position.set(snapped.x, this.position.y, snapped.z);
+
+    // Allow subclass to finalize world offset / pivot adjustments
+    if (typeof this.onMove === "function") {
+      try {
+        this.onMove(oldBase, { x: snapped.x, z: snapped.z }, { instant });
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    return true;
+  }
+
+  // Revert to previous base position (if any)
+  revertPosition() {
+    if (!this._prevBasePosition) return false;
+    const prev = this._prevBasePosition;
+    this.userData.basePosition = { x: prev.x, z: prev.z };
+    this.position.set(prev.x, this.position.y, prev.z);
+    if (typeof this.onMove === "function")
+      this.onMove(null, prev, { revert: true });
+    this._prevBasePosition = null;
+    return true;
+  }
+
   // Por defecto no hay cutout; las entidades que necesitan CSG lo implementan
   getCutoutBrush() {
     return null;
@@ -53,10 +121,14 @@ export class EntityBase extends THREE.Group {
   }
 
   toInfo() {
+    const base = this.userData.basePosition || {
+      x: this.position.x,
+      z: this.position.z,
+    };
     return {
       id: this.userData.id,
       type: this.userData.type,
-      position: { x: this.position.x, z: this.position.z },
+      position: { x: base.x, z: base.z },
       direction: this.userData.direction,
     };
   }

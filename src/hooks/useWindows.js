@@ -9,6 +9,11 @@ import {
 export const useWindows = (scene, wallsMesh) => {
   const [windows, setWindows] = useState([]);
   const windowObjectsRef = useRef(new Map());
+  const windowsRef = useRef(windows);
+
+  useEffect(() => {
+    windowsRef.current = windows;
+  }, [windows]);
 
   const addWindow = useCallback(
     (position, direction) => {
@@ -18,6 +23,27 @@ export const useWindows = (scene, wallsMesh) => {
       const windowData = { position, direction, id: windowId };
       const winObj = createWindow(windowData);
       if (!winObj) return null;
+      // Register simple validator to avoid overlapping windows
+      if (typeof winObj.setValidator === "function") {
+        winObj.setValidator((entity, ctx) => {
+          if (typeof entity.validatePosition === "function") {
+            const okLocal = entity.validatePosition(
+              ctx.world,
+              ctx.basePosition
+            );
+            if (!okLocal) return false;
+          }
+          const others = (windowsRef.current || []).filter(
+            (w) => w.id !== entity.userData.id
+          );
+          for (const ow of others) {
+            const dx = ow.position.x - (ctx.basePosition.x || 0);
+            const dz = ow.position.z - (ctx.basePosition.z || 0);
+            if (Math.hypot(dx, dz) < 2.0) return false;
+          }
+          return true;
+        });
+      }
       scene.add(winObj);
       windowObjectsRef.current.set(windowId, winObj);
       setWindows((prev) => [...prev, windowData]);
@@ -32,7 +58,12 @@ export const useWindows = (scene, wallsMesh) => {
       const winObj = scene.children.find(
         (c) => c.userData.type === "window" && c.userData.id === windowId
       );
-      if (winObj) scene.remove(winObj);
+      if (winObj) {
+        try {
+          if (typeof winObj.dispose === "function") winObj.dispose();
+        } catch (e) {}
+        scene.remove(winObj);
+      }
       if (windowObjectsRef.current.has(windowId))
         windowObjectsRef.current.delete(windowId);
       setWindows((prev) => prev.filter((w) => w.id !== windowId));
@@ -47,7 +78,17 @@ export const useWindows = (scene, wallsMesh) => {
         scene.children.find(
           (c) => c.userData.type === "window" && c.userData.id === windowId
         );
-      if (winObj) toggleWindow(winObj);
+      if (winObj) {
+        if (typeof winObj.toggle === "function") {
+          try {
+            winObj.toggle(false);
+          } catch (e) {
+            toggleWindow(winObj);
+          }
+        } else {
+          toggleWindow(winObj);
+        }
+      }
     },
     [scene]
   );
@@ -55,7 +96,9 @@ export const useWindows = (scene, wallsMesh) => {
   const updateAnimations = useCallback(() => {
     for (const winObj of windowObjectsRef.current.values()) {
       try {
-        updateWindowAnimation(winObj);
+        if (typeof winObj.updateAnimation === "function")
+          winObj.updateAnimation();
+        else updateWindowAnimation(winObj);
       } catch (e) {
         console.warn("useWindows: animation error", e);
       }
@@ -74,12 +117,82 @@ export const useWindows = (scene, wallsMesh) => {
     if (!scene) return;
     windowObjectsRef.current.forEach((w) => {
       try {
+        if (typeof w.dispose === "function") w.dispose();
         scene.remove(w);
       } catch (e) {}
     });
     windowObjectsRef.current.clear();
     setWindows([]);
   }, [scene]);
+
+  // Movement preview and commit for windows (drag UX)
+  const previewMoveWindow = useCallback(
+    (windowId, newPos) => {
+      const winObj =
+        windowObjectsRef.current.get(windowId) ||
+        scene.children.find(
+          (c) => c.userData.type === "window" && c.userData.id === windowId
+        );
+      if (!winObj) return false;
+      try {
+        const ok =
+          typeof winObj.moveTo === "function"
+            ? winObj.moveTo(newPos, {
+                validate: false,
+                snap: true,
+                instant: true,
+              })
+            : false;
+        if (ok) {
+          const p = winObj.toInfo().position;
+          setWindows((prev) =>
+            prev.map((w) => (w.id === windowId ? { ...w, position: p } : w))
+          );
+        }
+        return ok;
+      } catch (e) {
+        return false;
+      }
+    },
+    [scene]
+  );
+
+  const commitMoveWindow = useCallback(
+    (windowId, finalPos) => {
+      const winObj =
+        windowObjectsRef.current.get(windowId) ||
+        scene.children.find(
+          (c) => c.userData.type === "window" && c.userData.id === windowId
+        );
+      if (!winObj) return false;
+      try {
+        const ok =
+          typeof winObj.moveTo === "function"
+            ? winObj.moveTo(finalPos, {
+                validate: true,
+                world: { windows: windowsRef.current },
+              })
+            : false;
+        if (ok) {
+          const p = winObj.toInfo().position;
+          setWindows((prev) =>
+            prev.map((w) => (w.id === windowId ? { ...w, position: p } : w))
+          );
+        } else {
+          if (typeof winObj.revertPosition === "function")
+            winObj.revertPosition();
+        }
+        return ok;
+      } catch (e) {
+        try {
+          if (typeof winObj.revertPosition === "function")
+            winObj.revertPosition();
+        } catch (e) {}
+        return false;
+      }
+    },
+    [scene]
+  );
 
   useEffect(() => {
     let id;
@@ -102,6 +215,8 @@ export const useWindows = (scene, wallsMesh) => {
       setWindows((prev) =>
         prev.map((w) => (w.id === id ? { ...w, position: pos } : w))
       ),
+    previewMoveWindow,
+    commitMoveWindow,
     rebuildWalls,
     clearAllWindows,
   };

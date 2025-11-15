@@ -255,6 +255,29 @@ class DoorEntity extends EntityBase {
     cut.updateMatrixWorld();
     return cut;
   }
+
+  // Valida la posición base (grid) para esta puerta. Se puede pasar
+  // un contexto `world` para checks globales en el futuro.
+  validatePosition(world = null, basePos = null) {
+    const pos = basePos ||
+      this.userData.basePosition || { x: this.position.x, z: this.position.z };
+    return isValidDoorPosition({
+      x: pos.x,
+      z: pos.z,
+      direction: this.userData.direction,
+    });
+  }
+
+  // Cuando la entidad se mueve (commit), aplicar ajustes adicionales
+  // como offset según el grosor del muro y la altura Y.
+  onMove(oldBase, newBase, opts = {}) {
+    // reuse existing helper to set final world position and offsets
+    try {
+      updateDoorPosition(this, { x: newBase.x, z: newBase.z });
+    } catch (e) {
+      // ignore errors during onMove
+    }
+  }
 }
 
 export const createDoor = (options) => {

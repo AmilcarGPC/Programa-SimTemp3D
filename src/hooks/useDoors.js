@@ -20,6 +20,11 @@ export const useDoors = (scene, wallsMesh) => {
   // Mantener una colección rápida de referencias a los objetos 3D de las puertas
   // para no iterar `scene.children` cada frame.
   const doorObjectsRef = useRef(new Map());
+  const doorsRef = useRef(doors);
+
+  useEffect(() => {
+    doorsRef.current = doors;
+  }, [doors]);
 
   /**
    * Añade una nueva puerta en la posición especificada
@@ -69,6 +74,31 @@ export const useDoors = (scene, wallsMesh) => {
         return null;
       }
 
+      // Registrar un validador que impida solapamientos con otras puertas
+      if (typeof doorObject.setValidator === "function") {
+        doorObject.setValidator((entity, ctx) => {
+          // validar posición local primero
+          if (typeof entity.validatePosition === "function") {
+            const okLocal = entity.validatePosition(
+              ctx.world,
+              ctx.basePosition
+            );
+            if (!okLocal) return false;
+          }
+
+          // evitar puertas muy cercanas
+          const others = (doorsRef.current || []).filter(
+            (d) => d.id !== entity.userData.id
+          );
+          for (const od of others) {
+            const dx = od.position.x - (ctx.basePosition.x || 0);
+            const dz = od.position.z - (ctx.basePosition.z || 0);
+            if (Math.hypot(dx, dz) < 2.0) return false;
+          }
+          return true;
+        });
+      }
+
       // Añadir a la escena
       scene.add(doorObject);
       // Guardar referencia para actualizaciones rápidas (animación, toggles)
@@ -102,6 +132,9 @@ export const useDoors = (scene, wallsMesh) => {
       );
 
       if (doorObject) {
+        try {
+          if (typeof doorObject.dispose === "function") doorObject.dispose();
+        } catch (e) {}
         scene.remove(doorObject);
       }
 
@@ -129,6 +162,73 @@ export const useDoors = (scene, wallsMesh) => {
     );
   }, []);
 
+  // Movimiento en vista previa (drag): mover sin validar para feedback inmediato
+  const previewMoveDoor = useCallback(
+    (doorId, newPos) => {
+      const doorObj =
+        doorObjectsRef.current.get(doorId) ||
+        scene.children.find(
+          (c) => c.userData.type === "door" && c.userData.id === doorId
+        );
+      if (!doorObj) return false;
+      try {
+        const ok =
+          typeof doorObj.moveTo === "function"
+            ? doorObj.moveTo(newPos, {
+                validate: false,
+                snap: true,
+                instant: true,
+              })
+            : false;
+        // actualizar estado para UI
+        if (ok && typeof updateDoorPositionInState === "function") {
+          const p = doorObj.toInfo().position;
+          updateDoorPositionInState(doorId, p);
+        }
+        return ok;
+      } catch (e) {
+        return false;
+      }
+    },
+    [scene, updateDoorPositionInState]
+  );
+
+  // Commit final: validar con contexto global y aplicar o revertir
+  const commitMoveDoor = useCallback(
+    (doorId, finalPos) => {
+      const doorObj =
+        doorObjectsRef.current.get(doorId) ||
+        scene.children.find(
+          (c) => c.userData.type === "door" && c.userData.id === doorId
+        );
+      if (!doorObj) return false;
+      try {
+        const ok =
+          typeof doorObj.moveTo === "function"
+            ? doorObj.moveTo(finalPos, {
+                validate: true,
+                world: { doors: doorsRef.current },
+              })
+            : false;
+        if (ok) {
+          const p = doorObj.toInfo().position;
+          updateDoorPositionInState(doorId, p);
+        } else {
+          if (typeof doorObj.revertPosition === "function")
+            doorObj.revertPosition();
+        }
+        return ok;
+      } catch (e) {
+        try {
+          if (typeof doorObj.revertPosition === "function")
+            doorObj.revertPosition();
+        } catch (e) {}
+        return false;
+      }
+    },
+    [scene, updateDoorPositionInState]
+  );
+
   /**
    * Alterna el estado de una puerta (abierta/cerrada)
    */
@@ -144,7 +244,15 @@ export const useDoors = (scene, wallsMesh) => {
         );
 
       if (doorObject) {
-        toggleDoor(doorObject);
+        if (typeof doorObject.toggle === "function") {
+          try {
+            doorObject.toggle(false);
+          } catch (e) {
+            toggleDoor(doorObject);
+          }
+        } else {
+          toggleDoor(doorObject);
+        }
       }
     },
     [scene]
@@ -159,7 +267,9 @@ export const useDoors = (scene, wallsMesh) => {
     if (map && map.size > 0) {
       for (const doorObj of map.values()) {
         try {
-          updateDoorAnimation(doorObj);
+          if (typeof doorObj.updateAnimation === "function")
+            doorObj.updateAnimation();
+          else updateDoorAnimation(doorObj);
         } catch (e) {
           console.warn("useDoors: fallo al actualizar animación de puerta", e);
         }
@@ -193,6 +303,7 @@ export const useDoors = (scene, wallsMesh) => {
     // Usar el map para eliminar de forma segura
     doorObjectsRef.current.forEach((doorObj) => {
       try {
+        if (typeof doorObj.dispose === "function") doorObj.dispose();
         scene.remove(doorObj);
       } catch (e) {
         console.warn("useDoors: error al eliminar puerta del scene", e);
@@ -235,6 +346,8 @@ export const useDoors = (scene, wallsMesh) => {
     removeDoor,
     toggleDoorState,
     updateDoorPositionInState,
+    previewMoveDoor,
+    commitMoveDoor,
     rebuildWalls,
     clearAllDoors,
   };
