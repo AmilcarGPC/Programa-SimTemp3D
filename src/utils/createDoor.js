@@ -9,6 +9,7 @@ import {
   snapToGrid,
   updateDoorPosition,
 } from "./doorUtils";
+import { EntityBase } from "./EntityBase";
 
 // DOOR_CONFIG ahora se exporta desde `src/config/sceneConfig.js`
 
@@ -151,80 +152,115 @@ const createDoorCutout = () => {
 // `getDoorRotation` moved to `utils/doorUtils.js`
 
 /**
- * Crea una puerta completa con frame, panel y manija
- * @param {Object} options - { position: {x, z}, direction, id }
- * @returns {THREE.Group}
+ * Clase DoorEntity que encapsula la puerta y su comportamiento.
  */
+class DoorEntity extends EntityBase {
+  constructor({ position, direction, id } = {}) {
+    super({ type: "door", id, position });
+    if (!isValidDoorPosition({ ...position, direction })) {
+      // marcar como inválida para que la fábrica pueda decidir
+      this._invalid = true;
+      return;
+    }
+
+    this.userData.type = "door";
+    this.userData.id = id || this.userData.id;
+    this.userData.direction = direction;
+    this.userData.isOpen = false;
+    this.userData.targetAngle = 0;
+    this.userData.currentAngle = 0;
+
+    // Crear componentes
+    const frame = createDoorFrame();
+    const panel = createDoorPanel();
+    const handle = createDoorHandle();
+
+    const pivotGroup = new THREE.Group();
+    const { width, frameThickness } = DOOR_CONFIG;
+
+    const panelWidth = width - frameThickness * 2;
+    // Reasignar geometría para ajustar al ancho interior
+    try {
+      if (panel.geometry) panel.geometry.dispose();
+    } catch (e) {}
+    panel.geometry = new THREE.BoxGeometry(
+      panelWidth,
+      panel.geometry.parameters.height,
+      panel.geometry.parameters.depth
+    );
+
+    panel.position.x = -panelWidth / 2;
+    handle.position.x = -panelWidth * 0.85;
+    handle.position.y = 1.0;
+
+    pivotGroup.add(panel, handle);
+    pivotGroup.position.x = width / 2 - frameThickness;
+
+    this.add(frame, pivotGroup);
+    this.userData.pivotGroup = pivotGroup;
+
+    // Posicionar (y fijo en 0.15)
+    this.position.set(position.x, 0.15, position.z);
+    if (direction === DOOR_DIRECTIONS.NORTH) {
+      this.position.z += HOUSE_CONFIG.wallThickness / 2;
+    } else if (direction === DOOR_DIRECTIONS.SOUTH) {
+      this.position.z -= HOUSE_CONFIG.wallThickness / 2;
+    } else if (direction === DOOR_DIRECTIONS.EAST) {
+      this.position.x -= HOUSE_CONFIG.wallThickness / 2;
+    } else if (direction === DOOR_DIRECTIONS.WEST) {
+      this.position.x += HOUSE_CONFIG.wallThickness / 2;
+    }
+
+    this.rotation.y = getDoorRotation(direction);
+
+    // Animación/Toggle handlers
+    this.onToggle = (instant = false) => {
+      this.userData.isOpen = !this.userData.isOpen;
+      this.userData.targetAngle = this.userData.isOpen
+        ? DOOR_CONFIG.openAngle
+        : 0;
+      if (instant && this.userData.pivotGroup) {
+        this.userData.currentAngle = this.userData.targetAngle;
+        this.userData.pivotGroup.rotation.y = this.userData.targetAngle;
+      }
+    };
+
+    this.updateAnimation = () => {
+      const pivot = this.userData.pivotGroup;
+      if (!pivot) return;
+      const currentAngle = this.userData.currentAngle || 0;
+      const targetAngle = this.userData.targetAngle || 0;
+      if (Math.abs(currentAngle - targetAngle) > 0.01) {
+        const diff = targetAngle - currentAngle;
+        const step = Math.sign(diff) * (DOOR_CONFIG.animationSpeed || 0.05);
+        this.userData.currentAngle = currentAngle + step;
+        if (Math.abs(this.userData.currentAngle - targetAngle) < 0.01) {
+          this.userData.currentAngle = targetAngle;
+        }
+        pivot.rotation.y = this.userData.currentAngle;
+      }
+    };
+  }
+
+  // Para futuras integraciones con CSG, devolver un Brush posicionado
+  getCutoutBrush() {
+    const { width, height, depth } = DOOR_CONFIG;
+    const cutoutGeometry = new THREE.BoxGeometry(
+      width,
+      height,
+      Math.max(depth + 0.2, depth * 1.1)
+    );
+    const cut = new Brush(cutoutGeometry);
+    cut.position.y = 0.15 + height / 2;
+    cut.updateMatrixWorld();
+    return cut;
+  }
+}
+
 export const createDoor = (options) => {
-  const { position, direction, id } = options;
-
-  if (!isValidDoorPosition({ ...position, direction })) {
-    console.warn("Invalid door position:", position, direction);
-    return null;
-  }
-
-  const doorGroup = new THREE.Group();
-  doorGroup.userData = {
-    type: "door",
-    id: id || `door_${Date.now()}`,
-    direction,
-    isOpen: false,
-    targetAngle: 0,
-    currentAngle: 0,
-  };
-
-  // Crear componentes de la puerta
-  const frame = createDoorFrame();
-  const panel = createDoorPanel();
-  const handle = createDoorHandle();
-
-  // Grupo pivotante para la puerta (rota sobre el eje Y en el borde DERECHO)
-  const pivotGroup = new THREE.Group();
-  const { width, frameThickness } = DOOR_CONFIG;
-
-  // Ancho del panel para que quepa dentro del marco
-  const panelWidth = width - frameThickness * 2;
-  panel.geometry.dispose(); // Liberar memoria de la geometría anterior
-  panel.geometry = new THREE.BoxGeometry(
-    panelWidth,
-    panel.geometry.parameters.height,
-    panel.geometry.parameters.depth
-  );
-
-  // El panel se extiende hacia la izquierda desde el pivote (su borde derecho)
-  panel.position.x = -panelWidth / 2;
-
-  // Posicionar manija en el panel
-  handle.position.x = -panelWidth * 0.85;
-  handle.position.y = 1.0; // Altura de la manija
-
-  // El panel y la manija están centrados en el eje Z (0) por defecto,
-  // lo que los alinea con el centro del marco.
-  pivotGroup.add(panel, handle);
-
-  // Posicionar el pivote en el borde derecho interno del marco
-  pivotGroup.position.x = width / 2 - frameThickness;
-
-  doorGroup.add(frame, pivotGroup);
-  doorGroup.userData.pivotGroup = pivotGroup;
-
-  doorGroup.position.set(position.x, 0.15, position.z);
-
-  // Añadir desplazamiento para alinear con el muro usando wallThickness dependiendo de si es norte, sur, este u oeste
-  if (direction === DOOR_DIRECTIONS.NORTH) {
-    doorGroup.position.z += HOUSE_CONFIG.wallThickness / 2;
-  } else if (direction === DOOR_DIRECTIONS.SOUTH) {
-    doorGroup.position.z -= HOUSE_CONFIG.wallThickness / 2;
-  } else if (direction === DOOR_DIRECTIONS.EAST) {
-    doorGroup.position.x -= HOUSE_CONFIG.wallThickness / 2;
-  } else if (direction === DOOR_DIRECTIONS.WEST) {
-    doorGroup.position.x += HOUSE_CONFIG.wallThickness / 2;
-  }
-
-  // Posicionar y rotar la puerta según la dirección
-  doorGroup.rotation.y = getDoorRotation(direction);
-
-  return doorGroup;
+  const d = new DoorEntity(options);
+  if (d._invalid) return null;
+  return d;
 };
 
 /**
@@ -312,8 +348,17 @@ export const applyDoorCutouts = (wallsMesh, doorPositions) => {
 export const updateDoorAnimation = (doorGroup) => {
   if (!doorGroup || !doorGroup.userData) return;
 
-  const { pivotGroup, currentAngle = 0, targetAngle = 0 } = doorGroup.userData;
+  // Si la instancia provee su propio updateAnimation (p.ej. DoorEntity), delegar
+  if (typeof doorGroup.updateAnimation === "function") {
+    try {
+      doorGroup.updateAnimation();
+      return;
+    } catch (e) {
+      // fallthrough to legacy behaviour
+    }
+  }
 
+  const { pivotGroup, currentAngle = 0, targetAngle = 0 } = doorGroup.userData;
   if (!pivotGroup) return;
 
   if (Math.abs(currentAngle - targetAngle) > 0.01) {
@@ -338,6 +383,15 @@ export const updateDoorAnimation = (doorGroup) => {
  */
 export const toggleDoor = (doorGroup, instant = false) => {
   if (!doorGroup || !doorGroup.userData) return;
+
+  if (typeof doorGroup.toggle === "function") {
+    try {
+      doorGroup.toggle(instant);
+      return;
+    } catch (e) {
+      // fallthrough to legacy behaviour
+    }
+  }
 
   doorGroup.userData.isOpen = !doorGroup.userData.isOpen;
   doorGroup.userData.targetAngle = doorGroup.userData.isOpen

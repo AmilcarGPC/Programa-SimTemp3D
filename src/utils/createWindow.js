@@ -8,6 +8,7 @@ import {
   snapToGrid,
   updateWindowPosition,
 } from "./windowUtils";
+import { EntityBase } from "./EntityBase";
 
 /**
  * Crea el marco de la ventana
@@ -112,7 +113,6 @@ const createWindowGlass = () => {
     transparent: true,
     opacity: 0.9,
   });
-
   const glass = new THREE.Mesh(
     new THREE.BoxGeometry(width * 0.9, height * 0.9, glassThickness),
     glassMat
@@ -130,106 +130,147 @@ const createWindowCutout = () => {
     Math.max(depth + 0.2, depth * 1.1)
   );
   const brush = new Brush(geom);
-  // Position the cutout according to the window sill height so the hole aligns vertically
   brush.position.y = WINDOW_CONFIG.sillHeight + height / 2;
   brush.updateMatrixWorld();
   return brush;
 };
 
-export const createWindow = (options) => {
-  const { position, direction, id } = options;
+/**
+ * Clase WindowEntity que encapsula una ventana con persiana y luz interior.
+ */
+class WindowEntity extends EntityBase {
+  constructor({ position: pos, direction: dir, id: instanceId } = {}) {
+    super({ type: "window", id: instanceId, position: pos });
+    this.userData.direction = dir;
+    this.userData.isOpen = false;
+    this.userData.targetAngle = 0;
+    this.userData.currentAngle = 0;
 
+    const { width, height, frameThickness, glassThickness } = WINDOW_CONFIG;
+    const frame = createWindowFrame();
+    const grid = createWindowGrid();
+
+    const shutterGroup = new THREE.Group();
+    const innerWidth = width * 0.9;
+    const innerHeight = height * 0.9;
+    const shutterThickness = Math.max(frameThickness, 0.06);
+    const shutterMat = new THREE.MeshStandardMaterial({
+      color: 0x444d4d,
+      roughness: 0.8,
+      metalness: 0,
+    });
+
+    const shutterGeom = new THREE.BoxGeometry(
+      innerWidth,
+      innerHeight + 0.02,
+      shutterThickness
+    );
+    const shutter = new THREE.Mesh(shutterGeom, shutterMat);
+    shutter.position.set(0, innerHeight / 2, glassThickness / 2 + 0.01);
+    shutter.receiveShadow = false;
+    shutter.castShadow = false;
+    shutterGroup.add(shutter);
+
+    const shutterClosedY = innerHeight / 2;
+
+    const pointLight = new THREE.PointLight(0xfff3c4, 0, 1.2, 2);
+    pointLight.position.set(0, innerHeight / 2, -(glassThickness / 2) - 0.2);
+    pointLight.castShadow = false;
+
+    this.add(frame, grid, shutterGroup, pointLight);
+
+    this.userData.shutterGroup = shutterGroup;
+    this.userData.pointLight = pointLight;
+    this.userData.lightTarget = 0;
+    this.userData.lightCurrent = 0;
+
+    const shutterOpenY = shutterClosedY - (height + frameThickness + 0.15);
+    this.userData.shutterClosedY = shutterClosedY;
+    this.userData.shutterOpenY = shutterOpenY;
+    this.userData.shutterTargetY = shutterClosedY;
+    this.userData.shutterCurrentY = shutterClosedY;
+
+    this.position.set(pos.x, WINDOW_CONFIG.sillHeight, pos.z);
+
+    if (dir === WINDOW_DIRECTIONS.NORTH) {
+      this.position.z += HOUSE_CONFIG.wallThickness / 2;
+    } else if (dir === WINDOW_DIRECTIONS.SOUTH) {
+      this.position.z -= HOUSE_CONFIG.wallThickness / 2;
+    } else if (dir === WINDOW_DIRECTIONS.EAST) {
+      this.position.x -= HOUSE_CONFIG.wallThickness / 2;
+    } else if (dir === WINDOW_DIRECTIONS.WEST) {
+      this.position.x += HOUSE_CONFIG.wallThickness / 2;
+    }
+
+    this.rotation.y = getWindowRotation(dir);
+
+    this.onToggle = (instant = false) => {
+      this.userData.isOpen = !this.userData.isOpen;
+      const targetY = this.userData.isOpen
+        ? this.userData.shutterOpenY
+        : this.userData.shutterClosedY;
+      this.userData.shutterTargetY = targetY;
+      this.userData.lightTarget = this.userData.isOpen ? 2.5 : 0.0;
+      if (instant && this.userData.shutterGroup) {
+        this.userData.shutterCurrentY = targetY;
+        this.userData.shutterGroup.children.forEach((c) => {
+          c.position.y = targetY;
+        });
+        if (this.userData.pointLight) {
+          this.userData.lightCurrent = this.userData.lightTarget;
+          this.userData.pointLight.intensity = this.userData.lightTarget;
+          this.userData.pointLight.visible =
+            this.userData.pointLight.intensity > 0.001;
+        }
+      }
+    };
+
+    this.updateAnimation = () => {
+      const shutterGroup = this.userData.shutterGroup;
+      if (shutterGroup) {
+        const shutterCurrentY = this.userData.shutterCurrentY || 0;
+        const shutterTargetY = this.userData.shutterTargetY || 0;
+        if (Math.abs(shutterCurrentY - shutterTargetY) > 0.01) {
+          const diff = shutterTargetY - shutterCurrentY;
+          const step = Math.sign(diff) * (WINDOW_CONFIG.animationSpeed || 0.04);
+          this.userData.shutterCurrentY = shutterCurrentY + step;
+          if (Math.abs(this.userData.shutterCurrentY - shutterTargetY) < 0.01)
+            this.userData.shutterCurrentY = shutterTargetY;
+          shutterGroup.children.forEach((c) => {
+            c.position.y = this.userData.shutterCurrentY;
+          });
+        }
+      }
+
+      const pointLight = this.userData.pointLight;
+      if (pointLight) {
+        const lc = this.userData.lightCurrent || 0;
+        const lt = this.userData.lightTarget || 0;
+        if (Math.abs(lc - lt) > 0.01) {
+          const step = (WINDOW_CONFIG.animationSpeed || 0.04) * 1.2;
+          const next = lc + Math.sign(lt - lc) * step;
+          this.userData.lightCurrent = Math.abs(next) < 0.001 ? 0 : next;
+          pointLight.intensity = THREE.MathUtils.clamp(
+            this.userData.lightCurrent,
+            0,
+            3.5
+          );
+          pointLight.visible = pointLight.intensity > 0.001;
+        }
+      }
+    };
+  }
+}
+
+export const createWindow = ({ position, direction, id } = {}) => {
   if (!isValidWindowPosition({ ...position, direction })) {
     console.warn("Invalid window position:", position, direction);
     return null;
   }
-
-  const group = new THREE.Group();
-  group.userData = {
-    type: "window",
-    id: id || `window_${Date.now()}`,
-    direction,
-    isOpen: false,
-    targetAngle: 0,
-    currentAngle: 0,
-  };
-
-  // Obtener constantes de configuración locales (necesarias para la persiana)
-  const { width, height, frameThickness, glassThickness } = WINDOW_CONFIG;
-
-  const frame = createWindowFrame();
-  const grid = createWindowGrid();
-
-  // En este modelo la hoja (vidrio + rejilla) queda estática en su marco.
-  // Implementamos una persiana (shutter) que se desliza verticalmente,
-  // sin rotar la hoja ni el marco.
-
-  // Crear la persiana (shutter) como un panel que cubrirá el vidrio
-  const shutterGroup = new THREE.Group();
-  const innerWidth = width * 0.9;
-  const innerHeight = height * 0.9;
-  const shutterThickness = Math.max(frameThickness, 0.06);
-  const shutterMat = new THREE.MeshStandardMaterial({
-    color: 0x444d4d,
-    roughness: 0.8,
-    metalness: 0,
-  });
-
-  const shutterGeom = new THREE.BoxGeometry(
-    innerWidth,
-    innerHeight + 0.02,
-    shutterThickness
-  );
-  const shutter = new THREE.Mesh(shutterGeom, shutterMat);
-  // Posicionar la persiana para que cubra el vidrio cuando está cerrada
-  shutter.position.set(0, innerHeight / 2, glassThickness / 2 + 0.01);
-  shutter.receiveShadow = false;
-  shutter.castShadow = false;
-  shutterGroup.add(shutter);
-
-  // Posición Y cuando la persiana está cerrada (alineada cubriendo el vidrio)
-  const shutterClosedY = innerHeight / 2;
-
-  // (no emissive plane — removed to avoid occluding exterior)
-
-  // Crear una luz puntual interior que ilumine la habitación cuando la ventana esté abierta
-  // Mantener distancia muy limitada y decay alto para que la luz sea intensa pero no alcance el exterior
-  const pointLight = new THREE.PointLight(0xfff3c4, 0, 1.2, 2);
-  // colocar más hacia el interior (separamos más del plano de la ventana)
-  pointLight.position.set(0, innerHeight / 2, -(glassThickness / 2) - 0.2);
-  pointLight.castShadow = false;
-  // Distancia menor (1.2) y posición desplazada hacia el interior reducen su influencia hacia el exterior
-
-  // NOTE: glass panel removed per request; keep grid (muntins)
-  group.add(frame, grid, shutterGroup, pointLight);
-  group.userData.shutterGroup = shutterGroup;
-  group.userData.pointLight = pointLight;
-  group.userData.lightTarget = 0;
-  group.userData.lightCurrent = 0;
-
-  const shutterOpenY = shutterClosedY - (height + frameThickness + 0.15); // se baja por debajo del marco
-  group.userData.shutterClosedY = shutterClosedY;
-  group.userData.shutterOpenY = shutterOpenY;
-  group.userData.shutterTargetY = shutterClosedY;
-  group.userData.shutterCurrentY = shutterClosedY;
-
-  // Place the window so its bottom (sill) sits at the configured sillHeight
-  group.position.set(position.x, WINDOW_CONFIG.sillHeight, position.z);
-
-  if (direction === WINDOW_DIRECTIONS.NORTH) {
-    group.position.z += HOUSE_CONFIG.wallThickness / 2;
-  } else if (direction === WINDOW_DIRECTIONS.SOUTH) {
-    group.position.z -= HOUSE_CONFIG.wallThickness / 2;
-  } else if (direction === WINDOW_DIRECTIONS.EAST) {
-    group.position.x -= HOUSE_CONFIG.wallThickness / 2;
-  } else if (direction === WINDOW_DIRECTIONS.WEST) {
-    group.position.x += HOUSE_CONFIG.wallThickness / 2;
-  }
-
-  group.rotation.y = getWindowRotation(direction);
-
-  return group;
+  return new WindowEntity({ position, direction, id });
 };
+
+// WindowEntity and factory created earlier; createWindow factory returns WindowEntity instance
 
 export const applyWindowCutouts = (wallsMesh, windowPositions) => {
   if (!windowPositions || windowPositions.length === 0) return wallsMesh;
@@ -288,6 +329,16 @@ export const applyWindowCutouts = (wallsMesh, windowPositions) => {
 
 export const updateWindowAnimation = (windowGroup) => {
   if (!windowGroup || !windowGroup.userData) return;
+
+  if (typeof windowGroup.updateAnimation === "function") {
+    try {
+      windowGroup.updateAnimation();
+      return;
+    } catch (e) {
+      // fallthrough to legacy behaviour
+    }
+  }
+
   const {
     shutterGroup,
     shutterCurrentY = 0,
@@ -332,6 +383,16 @@ export const updateWindowAnimation = (windowGroup) => {
 
 export const toggleWindow = (windowGroup, instant = false) => {
   if (!windowGroup || !windowGroup.userData) return;
+
+  if (typeof windowGroup.toggle === "function") {
+    try {
+      windowGroup.toggle(instant);
+      return;
+    } catch (e) {
+      // fallthrough to legacy behaviour
+    }
+  }
+
   windowGroup.userData.isOpen = !windowGroup.userData.isOpen;
   const targetY = windowGroup.userData.isOpen
     ? windowGroup.userData.shutterOpenY
