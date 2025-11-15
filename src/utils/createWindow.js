@@ -18,7 +18,7 @@ const createWindowFrame = () => {
   const frameGroup = new THREE.Group();
 
   const frameMat = new THREE.MeshStandardMaterial({
-    color: 0x8aa3a3,
+    color: 0xffffff,
     roughness: 0.6,
     metalness: 0.0,
   });
@@ -64,7 +64,7 @@ const createWindowGrid = () => {
   const depth = glassThickness + 0.01;
 
   const gridMat = new THREE.MeshStandardMaterial({
-    color: 0x6f7f7f,
+    color: 0xffffff,
     roughness: 0.6,
     metalness: 0,
   });
@@ -125,8 +125,8 @@ const createWindowGlass = () => {
 const createWindowCutout = () => {
   const { width, height, depth } = WINDOW_CONFIG;
   const geom = new THREE.BoxGeometry(
-    width + 0.02,
-    height + 0.02,
+    width,
+    height,
     Math.max(depth + 0.2, depth * 1.1)
   );
   const brush = new Brush(geom);
@@ -158,7 +158,6 @@ export const createWindow = (options) => {
   const { width, height, frameThickness, glassThickness } = WINDOW_CONFIG;
 
   const frame = createWindowFrame();
-  const glass = createWindowGlass();
   const grid = createWindowGrid();
 
   // En este modelo la hoja (vidrio + rejilla) queda estática en su marco.
@@ -188,13 +187,26 @@ export const createWindow = (options) => {
   shutter.castShadow = false;
   shutterGroup.add(shutter);
 
-  // Añadir al grupo: marco, vidrio, rejilla (estáticos) y la persiana (animada)
-  group.add(frame, glass, grid, shutterGroup);
-  group.userData.shutterGroup = shutterGroup;
+  // Posición Y cuando la persiana está cerrada (alineada cubriendo el vidrio)
+  const shutterClosedY = innerHeight / 2;
 
-  // Calcular y almacenar posiciones de persiana (cerrada/abierta)
-  const shutterClosedY = shutter.position.y;
-  // Ahora la persiana se desplaza hacia abajo cuando se abre (por restricciones técnicas)
+  // (no emissive plane — removed to avoid occluding exterior)
+
+  // Crear una luz puntual interior que ilumine la habitación cuando la ventana esté abierta
+  // Mantener distancia muy limitada y decay alto para que la luz sea intensa pero no alcance el exterior
+  const pointLight = new THREE.PointLight(0xfff3c4, 0, 1.2, 2);
+  // colocar más hacia el interior (separamos más del plano de la ventana)
+  pointLight.position.set(0, innerHeight / 2, -(glassThickness / 2) - 0.2);
+  pointLight.castShadow = false;
+  // Distancia menor (1.2) y posición desplazada hacia el interior reducen su influencia hacia el exterior
+
+  // NOTE: glass panel removed per request; keep grid (muntins)
+  group.add(frame, grid, shutterGroup, pointLight);
+  group.userData.shutterGroup = shutterGroup;
+  group.userData.pointLight = pointLight;
+  group.userData.lightTarget = 0;
+  group.userData.lightCurrent = 0;
+
   const shutterOpenY = shutterClosedY - (height + frameThickness + 0.15); // se baja por debajo del marco
   group.userData.shutterClosedY = shutterClosedY;
   group.userData.shutterOpenY = shutterOpenY;
@@ -295,6 +307,27 @@ export const updateWindowAnimation = (windowGroup) => {
       c.position.y = windowGroup.userData.shutterCurrentY;
     });
   }
+  // (no emissive plane animation — removed to keep exterior view clear)
+
+  // Animar la intensidad de la luz puntual interior si existe
+  const pointLight = windowGroup.userData.pointLight;
+  if (pointLight) {
+    const lc = windowGroup.userData.lightCurrent || 0;
+    const lt = windowGroup.userData.lightTarget || 0;
+    if (Math.abs(lc - lt) > 0.01) {
+      // paso más pequeño para suavidad, multiplicado para mayor sensación de intensidad
+      const step = (WINDOW_CONFIG.animationSpeed || 0.04) * 1.2;
+      const next = lc + Math.sign(lt - lc) * step;
+      windowGroup.userData.lightCurrent = Math.abs(next) < 0.001 ? 0 : next;
+      // Permitir mayor intensidad y clamp para evitar valores extremos
+      pointLight.intensity = THREE.MathUtils.clamp(
+        windowGroup.userData.lightCurrent,
+        0,
+        3.5
+      );
+      pointLight.visible = pointLight.intensity > 0.001;
+    }
+  }
 };
 
 export const toggleWindow = (windowGroup, instant = false) => {
@@ -304,10 +337,19 @@ export const toggleWindow = (windowGroup, instant = false) => {
     ? windowGroup.userData.shutterOpenY
     : windowGroup.userData.shutterClosedY;
   windowGroup.userData.shutterTargetY = targetY;
+  // la luz interior usa un target más alto pero con distance/decay limitado para que no afecte el exterior
+  windowGroup.userData.lightTarget = windowGroup.userData.isOpen ? 2.5 : 0.0;
   if (instant && windowGroup.userData.shutterGroup) {
     windowGroup.userData.shutterCurrentY = targetY;
     windowGroup.userData.shutterGroup.children.forEach((c) => {
       c.position.y = targetY;
     });
+    if (windowGroup.userData.pointLight) {
+      windowGroup.userData.lightCurrent = windowGroup.userData.lightTarget;
+      windowGroup.userData.pointLight.intensity =
+        windowGroup.userData.lightTarget;
+      windowGroup.userData.pointLight.visible =
+        windowGroup.userData.pointLight.intensity > 0.001;
+    }
   }
 };

@@ -25,7 +25,7 @@ export const WINDOW_CONFIG = {
   width: 2, // ancho típico de ventana
   height: 1.75, // alto de ventana
   depth: HOUSE_CONFIG.wallThickness, // se ubica en el muro
-  frameThickness: 0.08,
+  frameThickness: 0.1,
   glassThickness: 0.02,
   sillDepth: 0.05,
   sillHeight: 0.75, // altura desde el suelo hasta la base de la ventana

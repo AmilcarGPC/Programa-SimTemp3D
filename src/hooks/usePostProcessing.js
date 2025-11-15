@@ -48,6 +48,8 @@ export const usePostProcessing = (renderer, scene, camera) => {
 
     newComposer.addPass(n8aoPass);
 
+    // (bloom effect removed to avoid occluding exterior view)
+
     // SMAA para anti-aliasing (recomendado con AO)
     const smaaEffect = new SMAAEffect();
     const smaaPass = new EffectPass(camera, smaaEffect);

@@ -133,8 +133,8 @@ const createDoorCutout = () => {
 
   // Crear geometría para el corte con profundidad suficiente
   const cutoutGeometry = new THREE.BoxGeometry(
-    width + 0.025, // Más margen
-    height + 0.025, // Más margen
+    width, // Más margen
+    height, // Más margen
     Math.max(depth + 0.2, depth * 1.1) // profundidad ligeramente mayor que el muro
   );
   const cutoutBrush = new Brush(cutoutGeometry);

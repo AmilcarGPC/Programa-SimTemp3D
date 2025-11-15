@@ -12,6 +12,7 @@ import { useAnimationLoop } from "../hooks/useAnimationLoop";
 import { useThermalEffects } from "../hooks/useThermalEffects";
 import { useDoors } from "../hooks/useDoors";
 import { useWindows } from "../hooks/useWindows";
+import { useHeaters } from "../hooks/useHeaters";
 import { createGround } from "../utils/createGround";
 import { createTrees } from "../utils/createTree";
 import { createHouse } from "../utils/createHouse";
@@ -20,7 +21,11 @@ import { applyWindowCutouts, toggleWindow } from "../utils/createWindow";
 import { updateDoorPosition, snapToGrid } from "../utils/doorUtils";
 import { updateWindowPosition } from "../utils/windowUtils";
 import { disposeObject } from "../utils/disposeUtils";
-import { isDoorWindowOverlapping } from "../utils/overlapUtils";
+import {
+  isDoorWindowOverlapping,
+  isHeaterBlockingDoor,
+  isHeaterBlockingWindow,
+} from "../utils/overlapUtils";
 import { WINDOW_CONFIG } from "../config/sceneConfig";
 import { TREE_POSITIONS, UI_CONFIG, HOUSE_CONFIG } from "../config/sceneConfig";
 import { Brush, Evaluator, SUBTRACTION } from "three-bvh-csg";
@@ -72,6 +77,16 @@ const ThermalHouseSimulator = () => {
     rebuildWalls: rebuildWindowWalls,
     clearAllWindows,
   } = useWindows(scene, wallsMeshRef);
+
+  // Hook para gestionar calefactores
+  const {
+    heaters,
+    addHeater,
+    removeHeater,
+    toggleHeaterState,
+    updateHeaterPositionInState,
+    clearAllHeaters,
+  } = useHeaters(scene);
 
   // Inicializar la escena con objetos 3D
   useEffect(() => {
@@ -192,6 +207,73 @@ const ThermalHouseSimulator = () => {
       const coords = getMouseCoords(event);
       mouse.set(coords.x, coords.y);
       raycaster.setFromCamera(mouse, camera);
+      // Primero comprobar si clic derecho fue sobre un objeto interactivo (puerta/ventana/calefactor)
+      const interactiveObjects = scene.children.filter(
+        (child) =>
+          child.userData &&
+          (child.userData.type === "door" ||
+            child.userData.type === "window" ||
+            child.userData.type === "heater")
+      );
+
+      const objIntersects = raycaster.intersectObjects(
+        interactiveObjects,
+        true
+      );
+      if (objIntersects.length > 0) {
+        let group = objIntersects[0].object;
+        while (
+          group &&
+          !(
+            group.userData &&
+            (group.userData.type === "door" ||
+              group.userData.type === "window" ||
+              group.userData.type === "heater")
+          )
+        ) {
+          group = group.parent;
+        }
+
+        if (
+          group &&
+          (group.userData.type === "door" ||
+            group.userData.type === "window" ||
+            group.userData.type === "heater")
+        ) {
+          setContextMenu({
+            x: event.clientX,
+            y: event.clientY,
+            object: { type: group.userData.type, id: group.userData.id },
+          });
+          return;
+        }
+      }
+
+      // Si no fue sobre objeto interactivo, comprobar si fue sobre el suelo (para añadir calefactor)
+      const allIntersects = raycaster.intersectObjects(scene.children, true);
+      if (allIntersects && allIntersects.length > 0) {
+        const nearest = allIntersects[0];
+        const obj = nearest.object;
+        const isGround =
+          obj && (obj.name === "ground" || obj.parent?.name === "ground");
+        if (isGround) {
+          const point = nearest.point;
+          // Only allow heater placement inside the allowed heater footprint (±4)
+          const heaterBoundary = 4;
+          const insideX = Math.abs(point.x) <= heaterBoundary;
+          const insideZ = Math.abs(point.z) <= heaterBoundary;
+          const nearGround = Math.abs(point.y) <= 0.2; // close to floor
+          if (insideX && insideZ && nearGround) {
+            const snapped = snapToGrid({ x: point.x, z: point.z });
+            setContextMenu({
+              x: event.clientX,
+              y: event.clientY,
+              floorPosition: snapped,
+            });
+            return;
+          }
+        }
+      }
 
       // Intersectar con el mesh de las paredes directamente
       if (!wallsMeshRef) {
@@ -203,13 +285,30 @@ const ThermalHouseSimulator = () => {
       const intersects = raycaster.intersectObject(wallsMeshRef, false);
 
       if (intersects.length > 0) {
-        const intersectPoint = intersects[0].point;
+        const intersect = intersects[0];
+        const intersectPoint = intersect.point;
 
-        // Validar que la intersección esté en la altura de los muros (no piso)
-        // Permitir desde ligeramente arriba del piso (0.15) hasta el techo completo
+        // If the hit is near the floor inside the house footprint, treat as floor click
+        const heaterBoundary = 4;
+        const insideX = Math.abs(intersectPoint.x) <= heaterBoundary;
+        const insideZ = Math.abs(intersectPoint.z) <= heaterBoundary;
+        const nearFloor = Math.abs(intersectPoint.y) <= 0.2;
+        if (insideX && insideZ && nearFloor) {
+          const snapped = snapToGrid({
+            x: intersectPoint.x,
+            z: intersectPoint.z,
+          });
+          setContextMenu({
+            x: event.clientX,
+            y: event.clientY,
+            floorPosition: snapped,
+          });
+          return;
+        }
+
+        // Otherwise treat as wall hit — ensure it's within wall vertical range
         const { wallHeight } = HOUSE_CONFIG;
         if (intersectPoint.y < 0.1 || intersectPoint.y > wallHeight + 0.1) {
-          // Está en el piso o fuera del rango, cerrar menú si está abierto
           setContextMenu(null);
           return;
         }
@@ -217,7 +316,6 @@ const ThermalHouseSimulator = () => {
         const wallInfo = detectWall(intersectPoint);
 
         if (wallInfo) {
-          // Abrir menú en la posición del muro válido
           setContextMenu({
             x: event.clientX,
             y: event.clientY,
@@ -225,11 +323,9 @@ const ThermalHouseSimulator = () => {
             direction: wallInfo.direction,
           });
         } else {
-          // No hay muro válido, cerrar menú
           setContextMenu(null);
         }
       } else {
-        // No intersectó nada, cerrar menú si está abierto
         setContextMenu(null);
       }
     };
@@ -242,11 +338,13 @@ const ThermalHouseSimulator = () => {
       mouse.set(coords.x, coords.y);
       raycaster.setFromCamera(mouse, camera);
 
-      // Detectar clic en objeto interactivo (puerta o ventana)
+      // Detectar clic en objeto interactivo (puerta, ventana o calefactor)
       const interactiveObjects = scene.children.filter(
         (child) =>
           child.userData &&
-          (child.userData.type === "door" || child.userData.type === "window")
+          (child.userData.type === "door" ||
+            child.userData.type === "window" ||
+            child.userData.type === "heater")
       );
 
       const intersects = raycaster.intersectObjects(interactiveObjects, true);
@@ -254,12 +352,14 @@ const ThermalHouseSimulator = () => {
       if (intersects.length > 0) {
         let group = intersects[0].object;
 
-        // Buscar el grupo padre que es la entidad (door/window)
+        // Buscar el grupo padre que es la entidad (door/window/heater)
         while (
           group &&
           !(
             group.userData &&
-            (group.userData.type === "door" || group.userData.type === "window")
+            (group.userData.type === "door" ||
+              group.userData.type === "window" ||
+              group.userData.type === "heater")
           )
         ) {
           group = group.parent;
@@ -267,15 +367,45 @@ const ThermalHouseSimulator = () => {
 
         if (
           group &&
-          (group.userData.type === "door" || group.userData.type === "window")
+          (group.userData.type === "door" ||
+            group.userData.type === "window" ||
+            group.userData.type === "heater")
         ) {
-          // Guardar para drag
+          // Store previous position to allow easy revert on invalid drop
+          if (group.userData.type === "door") {
+            const prev = doors.find((d) => d.id === group.userData.id);
+            if (prev && prev.position) {
+              group.userData.prevPosition = {
+                x: prev.position.x,
+                z: prev.position.z,
+              };
+            }
+          } else if (group.userData.type === "window") {
+            const prev = windows.find((w) => w.id === group.userData.id);
+            if (prev && prev.position) {
+              group.userData.prevPosition = {
+                x: prev.position.x,
+                z: prev.position.z,
+              };
+            }
+          } else if (group.userData.type === "heater") {
+            const prev = heaters.find((h) => h.id === group.userData.id);
+            if (prev && prev.position) {
+              group.userData.prevPosition = {
+                x: prev.position.x,
+                z: prev.position.z,
+              };
+            }
+          }
+          // Guardar para click/posible drag
           dragStartPos.current = { x: event.clientX, y: event.clientY };
+          // Reset drag flag for any interactive object (doors, windows, heaters)
           group.userData.isDragging = undefined; // Reset flag
-          setDraggedDoor(group);
-
+          // Reset last snapped position so heater jump-snapping starts fresh
+          group.userData.lastSnapped = null;
           // Cambiar cursor
           container.style.cursor = "grabbing";
+          setDraggedDoor(group);
           return;
         }
       }
@@ -298,6 +428,8 @@ const ThermalHouseSimulator = () => {
         return;
       }
 
+      // Allow drag behavior for heaters as well as doors/windows
+
       // Drag de puerta
       if (!dragStartPos.current) return;
 
@@ -311,8 +443,8 @@ const ThermalHouseSimulator = () => {
         if (draggedDoor.userData.isDragging === undefined) {
           draggedDoor.userData.isDragging = true;
 
-          // Quitar los cortes mientras se arrastra
-          if (wallsMeshRef) {
+          // Quitar los cortes mientras se arrastra solo si se arrastra una puerta/ventana
+          if (wallsMeshRef && draggedDoor.userData.type !== "heater") {
             scene.remove(wallsMeshRef);
             disposeObject(wallsMeshRef);
 
@@ -344,47 +476,62 @@ const ThermalHouseSimulator = () => {
         const { size } = HOUSE_CONFIG;
         const halfSize = size / 2;
 
-        // Crear plano según la dirección
+        // Crear plano según la dirección (puerta/ventana) o plano del suelo para calefactor
         let plane;
-        switch (direction) {
-          case "north":
-            plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), halfSize);
-            break;
-          case "south":
-            plane = new THREE.Plane(new THREE.Vector3(0, 0, -1), halfSize);
-            break;
-          case "east":
-            plane = new THREE.Plane(new THREE.Vector3(-1, 0, 0), halfSize);
-            break;
-          case "west":
-            plane = new THREE.Plane(new THREE.Vector3(1, 0, 0), halfSize);
-            break;
+        if (draggedDoor.userData.type === "heater") {
+          // plano horizontal en y = 0
+          plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+        } else {
+          switch (direction) {
+            case "north":
+              plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), halfSize);
+              break;
+            case "south":
+              plane = new THREE.Plane(new THREE.Vector3(0, 0, -1), halfSize);
+              break;
+            case "east":
+              plane = new THREE.Plane(new THREE.Vector3(-1, 0, 0), halfSize);
+              break;
+            case "west":
+              plane = new THREE.Plane(new THREE.Vector3(1, 0, 0), halfSize);
+              break;
+          }
         }
 
         const intersectPoint = new THREE.Vector3();
         if (raycaster.ray.intersectPlane(plane, intersectPoint)) {
           const newPosition = { x: intersectPoint.x, z: intersectPoint.z };
 
-          // Ajustar al muro
-          switch (direction) {
-            case "north":
-              newPosition.z = -halfSize;
-              break;
-            case "south":
-              newPosition.z = halfSize;
-              break;
-            case "east":
-              newPosition.x = halfSize;
-              break;
-            case "west":
-              newPosition.x = -halfSize;
-              break;
-          }
+          if (draggedDoor.userData.type === "heater") {
+            // mover sobre el suelo con salto discreto (snap entero)
+            const snapped = snapToGrid(newPosition);
+            const last = draggedDoor.userData.lastSnapped;
+            if (!last || last.x !== snapped.x || last.z !== snapped.z) {
+              draggedDoor.position.set(snapped.x, 0, snapped.z);
+              draggedDoor.userData.lastSnapped = { x: snapped.x, z: snapped.z };
+            }
+          } else {
+            // Ajustar al muro
+            switch (direction) {
+              case "north":
+                newPosition.z = -halfSize;
+                break;
+              case "south":
+                newPosition.z = halfSize;
+                break;
+              case "east":
+                newPosition.x = halfSize;
+                break;
+              case "west":
+                newPosition.x = -halfSize;
+                break;
+            }
 
-          if (draggedDoor.userData.type === "door") {
-            updateDoorPosition(draggedDoor, newPosition);
-          } else if (draggedDoor.userData.type === "window") {
-            updateWindowPosition(draggedDoor, newPosition);
+            if (draggedDoor.userData.type === "door") {
+              updateDoorPosition(draggedDoor, newPosition);
+            } else if (draggedDoor.userData.type === "window") {
+              updateWindowPosition(draggedDoor, newPosition);
+            }
           }
         }
       }
@@ -399,12 +546,14 @@ const ThermalHouseSimulator = () => {
         const dy = event.clientY - dragStartPos.current.y;
         const distance = Math.sqrt(dx * dx + dy * dy);
 
-        // Si no se movió, es un clic -> toggle (puerta o ventana)
+        // Si no se movió, es un clic -> toggle (puerta, ventana o calefactor)
         if (distance < 5) {
           if (draggedDoor.userData.type === "door") {
             toggleDoor(draggedDoor, true);
           } else if (draggedDoor.userData.type === "window") {
             toggleWindow(draggedDoor, true);
+          } else if (draggedDoor.userData.type === "heater") {
+            toggleHeaterState(draggedDoor.userData.id);
           }
         } else if (draggedDoor.userData.isDragging) {
           // Se movió -> actualizar posición en el estado para reconstruir paredes
@@ -420,13 +569,37 @@ const ThermalHouseSimulator = () => {
             const conflict = windows.some((w) =>
               isDoorWindowOverlapping(candidate, w)
             );
+            const heaterConflict = heaters.some((h) =>
+              isHeaterBlockingDoor(h.position, candidate)
+            );
             if (conflict) {
               console.warn(
                 "Movimiento inválido: la puerta solapa con una ventana"
               );
               // revertir a la posición anterior usando los helpers (actualiza escena + estado)
-              const prev = doors.find((d) => d.id === draggedDoor.userData.id);
-              if (prev) {
+              const prevPos = draggedDoor.userData.prevPosition;
+              const prev = prevPos
+                ? { position: prevPos }
+                : doors.find((d) => d.id === draggedDoor.userData.id);
+              if (prev && prev.position) {
+                updateDoorPosition(draggedDoor, {
+                  x: prev.position.x,
+                  z: prev.position.z,
+                });
+                updateDoorPositionInState(
+                  draggedDoor.userData.id,
+                  prev.position
+                );
+              }
+            } else if (heaterConflict) {
+              console.warn(
+                "Movimiento inválido: la puerta quedaría delante de un calefactor"
+              );
+              const prevPos = draggedDoor.userData.prevPosition;
+              const prev = prevPos
+                ? { position: prevPos }
+                : doors.find((d) => d.id === draggedDoor.userData.id);
+              if (prev && prev.position) {
                 updateDoorPosition(draggedDoor, {
                   x: prev.position.x,
                   z: prev.position.z,
@@ -447,14 +620,36 @@ const ThermalHouseSimulator = () => {
             const conflict = doors.some((d) =>
               isDoorWindowOverlapping(d, candidate)
             );
+            const heaterConflict = heaters.some((h) =>
+              isHeaterBlockingWindow(h.position, candidate)
+            );
             if (conflict) {
               console.warn(
                 "Movimiento inválido: la ventana solapa con una puerta"
               );
-              const prev = windows.find(
-                (w) => w.id === draggedDoor.userData.id
+              const prevPos = draggedDoor.userData.prevPosition;
+              const prev = prevPos
+                ? { position: prevPos }
+                : windows.find((w) => w.id === draggedDoor.userData.id);
+              if (prev && prev.position) {
+                updateWindowPosition(draggedDoor, {
+                  x: prev.position.x,
+                  z: prev.position.z,
+                });
+                updateWindowPositionInState(
+                  draggedDoor.userData.id,
+                  prev.position
+                );
+              }
+            } else if (heaterConflict) {
+              console.warn(
+                "Movimiento inválido: la ventana quedaría delante de un calefactor"
               );
-              if (prev) {
+              const prevPos = draggedDoor.userData.prevPosition;
+              const prev = prevPos
+                ? { position: prevPos }
+                : windows.find((w) => w.id === draggedDoor.userData.id);
+              if (prev && prev.position) {
                 updateWindowPosition(draggedDoor, {
                   x: prev.position.x,
                   z: prev.position.z,
@@ -466,6 +661,80 @@ const ThermalHouseSimulator = () => {
               }
             } else {
               updateWindowPositionInState(draggedDoor.userData.id, newPos);
+            }
+          } else if (draggedDoor.userData.type === "heater") {
+            // Se movió un calefactor -> comprobar límites dentro de la casa y solapamientos
+            const heaterBoundary = 4; // límite permitido: ±4 en X/Z
+            const withinBoundary =
+              Math.abs(newPos.x) <= heaterBoundary &&
+              Math.abs(newPos.z) <= heaterBoundary;
+
+            if (!withinBoundary) {
+              console.warn(
+                "Movimiento inválido: el calefactor queda fuera del área permitida ±4"
+              );
+              // revertir a la posición anterior
+              const prevPos = draggedDoor.userData.prevPosition;
+              const prev = prevPos
+                ? { position: prevPos }
+                : heaters.find((h) => h.id === draggedDoor.userData.id);
+              if (prev && prev.position) {
+                draggedDoor.position.set(prev.position.x, 0, prev.position.z);
+                updateHeaterPositionInState(
+                  draggedDoor.userData.id,
+                  prev.position
+                );
+              }
+            } else {
+              const candidate = { x: newPos.x, z: newPos.z };
+              const doorConflict = doors.some((d) =>
+                isHeaterBlockingDoor(candidate, d)
+              );
+              const windowConflict = windows.some((w) =>
+                isHeaterBlockingWindow(candidate, w)
+              );
+              if (doorConflict || windowConflict) {
+                console.warn(
+                  "Movimiento inválido: el calefactor bloquea una puerta o ventana"
+                );
+                // revertir a la posición anterior
+                const prevPos = draggedDoor.userData.prevPosition;
+                const prev = prevPos
+                  ? { position: prevPos }
+                  : heaters.find((h) => h.id === draggedDoor.userData.id);
+                if (prev && prev.position) {
+                  draggedDoor.position.set(prev.position.x, 0, prev.position.z);
+                  // rotate to face center from reverted position
+                  try {
+                    const raw = Math.atan2(-prev.position.x, -prev.position.z);
+                    const step = Math.PI / 2;
+                    draggedDoor.rotation.y = Math.round(raw / step) * step;
+                  } catch (e) {
+                    // ignore
+                  }
+                  updateHeaterPositionInState(
+                    draggedDoor.userData.id,
+                    prev.position
+                  );
+                }
+              } else {
+                updateHeaterPositionInState(draggedDoor.userData.id, newPos);
+                // rotate accepted heater to face center from new position
+                try {
+                  const obj = scene.children.find(
+                    (c) =>
+                      c.userData?.type === "heater" &&
+                      c.userData.id === draggedDoor.userData.id
+                  );
+                  if (obj) {
+                    const raw = Math.atan2(-newPos.x, -newPos.z);
+                    const step = Math.PI / 2;
+                    obj.rotation.y = Math.round(raw / step) * step;
+                  }
+                } catch (e) {
+                  // ignore
+                }
+              }
             }
           }
         }
@@ -539,9 +808,19 @@ const ThermalHouseSimulator = () => {
       const conflict = windows.some((w) =>
         isDoorWindowOverlapping(candidate, w)
       );
+      // comprobar solapamiento con calefactores (no pueden estar enfrente)
+      const heaterConflict = heaters.some((h) =>
+        isHeaterBlockingDoor(h.position, candidate)
+      );
       if (conflict) {
         console.warn(
           "No se puede añadir la puerta: solapa con una ventana existente"
+        );
+        return;
+      }
+      if (heaterConflict) {
+        console.warn(
+          "No se puede añadir la puerta: coloca una puerta delante de un calefactor existente"
         );
         return;
       }
@@ -555,9 +834,18 @@ const ThermalHouseSimulator = () => {
         direction: contextMenu.direction,
       };
       const conflict = doors.some((d) => isDoorWindowOverlapping(d, candidate));
+      const heaterConflict = heaters.some((h) =>
+        isHeaterBlockingWindow(h.position, candidate)
+      );
       if (conflict) {
         console.warn(
           "No se puede añadir la ventana: solapa con una puerta existente"
+        );
+        return;
+      }
+      if (heaterConflict) {
+        console.warn(
+          "No se puede añadir la ventana: coloca una ventana delante de un calefactor existente"
         );
         return;
       }
@@ -565,7 +853,42 @@ const ThermalHouseSimulator = () => {
       if (win) {
         console.log("🪟 Ventana añadida desde menú contextual");
       }
+    } else if (componentType === "heater") {
+      // floorPosition expected in contextMenu
+      if (!contextMenu || !contextMenu.floorPosition) {
+        console.warn("No floor position available for heater placement");
+        return;
+      }
+      // Check overlap with doors/windows before placing
+      const candidatePos = contextMenu.floorPosition;
+      const doorConflict = doors.some((d) =>
+        isHeaterBlockingDoor(candidatePos, d)
+      );
+      const windowConflict = windows.some((w) =>
+        isHeaterBlockingWindow(candidatePos, w)
+      );
+      if (doorConflict || windowConflict) {
+        console.warn(
+          "No se puede añadir el calefactor: bloquea una puerta o ventana"
+        );
+        return;
+      }
+      const heater = addHeater(contextMenu.floorPosition);
+      if (heater) console.log("🔥 Calefactor añadido desde menú contextual");
     }
+  };
+
+  // Manejar eliminación desde el menú contextual
+  const handleDeleteObject = (objectInfo) => {
+    if (!objectInfo || !objectInfo.type) return;
+    if (objectInfo.type === "door") {
+      removeDoor(objectInfo.id);
+    } else if (objectInfo.type === "window") {
+      removeWindowFn(objectInfo.id);
+    } else if (objectInfo.type === "heater") {
+      removeHeater(objectInfo.id);
+    }
+    setContextMenu(null);
   };
 
   // Reconstruir paredes automáticamente cuando cambian las puertas
@@ -633,6 +956,7 @@ const ThermalHouseSimulator = () => {
         position={contextMenu}
         onClose={() => setContextMenu(null)}
         onSelectComponent={handleSelectComponent}
+        onDeleteObject={handleDeleteObject}
       />
     </div>
   );
