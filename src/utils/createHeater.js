@@ -30,7 +30,7 @@ export const createHeater = ({ position, id }) => {
       const bodyGeom = new THREE.BoxGeometry(width, height, depth);
       const body = new THREE.Mesh(bodyGeom, bodyMat);
       body.position.y = height / 2;
-      body.castShadow = true;
+      body.castShadow = false;
       body.receiveShadow = true;
       this.add(body);
 
@@ -81,7 +81,7 @@ export const createHeater = ({ position, id }) => {
       const footGeom = new THREE.BoxGeometry(width - 0.1, 0.05, depth - 0.1);
       const foot = new THREE.Mesh(footGeom, footMat);
       foot.position.y = 0.025;
-      foot.castShadow = true;
+      foot.castShadow = false;
       foot.receiveShadow = true;
       this.add(foot);
 
@@ -95,7 +95,7 @@ export const createHeater = ({ position, id }) => {
       const topGeom = new THREE.BoxGeometry(width, 0.08, depth);
       const top = new THREE.Mesh(topGeom, topMat);
       top.position.y = height + 0.04;
-      top.castShadow = true;
+      top.castShadow = false;
       top.receiveShadow = true;
       this.add(top);
 

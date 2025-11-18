@@ -70,13 +70,36 @@ export class EntityBase extends THREE.Group {
       ? { ...this.userData.basePosition }
       : { x: this.position.x, z: this.position.z };
 
+    try {
+      console.debug("EntityBase.moveTo start", {
+        id: this.userData.id,
+        type: this.userData.type,
+        newPos,
+        snapped,
+        snap,
+        validate,
+      });
+    } catch (e) {}
+
     // Run validator if provided
     if (validate) {
       if (typeof this._validator === "function") {
         const ok = this._validator(this, { world, basePosition: snapped });
+        try {
+          console.debug("EntityBase.moveTo _validator result", {
+            id: this.userData.id,
+            ok,
+          });
+        } catch (e) {}
         if (!ok) return false;
       } else {
         const ok = this.validatePosition(world, snapped);
+        try {
+          console.debug("EntityBase.moveTo validatePosition result", {
+            id: this.userData.id,
+            ok,
+          });
+        } catch (e) {}
         if (!ok) return false;
       }
     }
@@ -94,6 +117,19 @@ export class EntityBase extends THREE.Group {
         // ignore
       }
     }
+
+    try {
+      console.debug("EntityBase.moveTo success", {
+        id: this.userData.id,
+        type: this.userData.type,
+        basePosition: this.userData.basePosition,
+        worldPosition: {
+          x: this.position.x,
+          y: this.position.y,
+          z: this.position.z,
+        },
+      });
+    } catch (e) {}
 
     return true;
   }

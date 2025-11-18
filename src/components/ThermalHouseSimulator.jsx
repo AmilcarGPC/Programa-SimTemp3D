@@ -13,6 +13,7 @@ import { useThermalEffects } from "../hooks/useThermalEffects";
 import { useDoors } from "../hooks/useDoors";
 import { useWindows } from "../hooks/useWindows";
 import { useHeaters } from "../hooks/useHeaters";
+import { useAirConditioners } from "../hooks/useAirConditioners";
 import { createGround } from "../utils/createGround";
 import { createTrees } from "../utils/createTree";
 import { createHouse } from "../utils/createHouse";
@@ -25,6 +26,10 @@ import {
   isDoorWindowOverlapping,
   isHeaterBlockingDoor,
   isHeaterBlockingWindow,
+  isACOverlappingDoor,
+  isACOverlappingWindow,
+  isACOverlappingAC,
+  isHeaterBlockingAC,
 } from "../utils/overlapUtils";
 import { WINDOW_CONFIG } from "../config/sceneConfig";
 import { TREE_POSITIONS, UI_CONFIG, HOUSE_CONFIG } from "../config/sceneConfig";
@@ -88,6 +93,17 @@ const ThermalHouseSimulator = () => {
     clearAllHeaters,
   } = useHeaters(scene);
 
+  // Hook para gestionar aires acondicionados (wall-mounted)
+  const {
+    acs,
+    addAirConditioner,
+    removeAirConditioner,
+    toggleAirConditionerState,
+    updateACPositionInState,
+    clearAllACs,
+    previewMoveAircon,
+    commitMoveAircon,
+  } = useAirConditioners(scene);
   // Inicializar la escena con objetos 3D
   useEffect(() => {
     if (!scene) return;
@@ -213,7 +229,8 @@ const ThermalHouseSimulator = () => {
           child.userData &&
           (child.userData.type === "door" ||
             child.userData.type === "window" ||
-            child.userData.type === "heater")
+            child.userData.type === "heater" ||
+            child.userData.type === "aircon")
       );
 
       const objIntersects = raycaster.intersectObjects(
@@ -222,13 +239,15 @@ const ThermalHouseSimulator = () => {
       );
       if (objIntersects.length > 0) {
         let group = objIntersects[0].object;
+        // Walk up until we find the entity group (door/window/heater/aircon)
         while (
           group &&
           !(
             group.userData &&
             (group.userData.type === "door" ||
               group.userData.type === "window" ||
-              group.userData.type === "heater")
+              group.userData.type === "heater" ||
+              group.userData.type === "aircon")
           )
         ) {
           group = group.parent;
@@ -261,17 +280,6 @@ const ThermalHouseSimulator = () => {
           // Only allow heater placement inside the allowed heater footprint (±4)
           const heaterBoundary = 4;
           const insideX = Math.abs(point.x) <= heaterBoundary;
-          const insideZ = Math.abs(point.z) <= heaterBoundary;
-          const nearGround = Math.abs(point.y) <= 0.2; // close to floor
-          if (insideX && insideZ && nearGround) {
-            const snapped = snapToGrid({ x: point.x, z: point.z });
-            setContextMenu({
-              x: event.clientX,
-              y: event.clientY,
-              floorPosition: snapped,
-            });
-            return;
-          }
         }
       }
 
@@ -344,7 +352,8 @@ const ThermalHouseSimulator = () => {
           child.userData &&
           (child.userData.type === "door" ||
             child.userData.type === "window" ||
-            child.userData.type === "heater")
+            child.userData.type === "heater" ||
+            child.userData.type === "aircon")
       );
 
       const intersects = raycaster.intersectObjects(interactiveObjects, true);
@@ -359,7 +368,8 @@ const ThermalHouseSimulator = () => {
             group.userData &&
             (group.userData.type === "door" ||
               group.userData.type === "window" ||
-              group.userData.type === "heater")
+              group.userData.type === "heater" ||
+              group.userData.type === "aircon")
           )
         ) {
           group = group.parent;
@@ -369,7 +379,8 @@ const ThermalHouseSimulator = () => {
           group &&
           (group.userData.type === "door" ||
             group.userData.type === "window" ||
-            group.userData.type === "heater")
+            group.userData.type === "heater" ||
+            group.userData.type === "aircon")
         ) {
           // Store previous position to allow easy revert on invalid drop
           if (group.userData.type === "door") {
@@ -390,6 +401,14 @@ const ThermalHouseSimulator = () => {
             }
           } else if (group.userData.type === "heater") {
             const prev = heaters.find((h) => h.id === group.userData.id);
+            if (prev && prev.position) {
+              group.userData.prevPosition = {
+                x: prev.position.x,
+                z: prev.position.z,
+              };
+            }
+          } else if (group.userData.type === "aircon") {
+            const prev = acs.find((a) => a.id === group.userData.id);
             if (prev && prev.position) {
               group.userData.prevPosition = {
                 x: prev.position.x,
@@ -456,12 +475,16 @@ const ThermalHouseSimulator = () => {
             const remainingWindows = windows.filter(
               (w) => w.id !== draggedDoor.userData.id
             );
+            const remainingACs = acs.filter(
+              (a) => a.id !== draggedDoor.userData.id
+            );
 
             let tempWalls = house.walls;
             if (remainingDoors.length > 0)
               tempWalls = applyDoorCutouts(tempWalls, remainingDoors);
             if (remainingWindows.length > 0)
               tempWalls = applyWindowCutouts(tempWalls, remainingWindows);
+            // AC cutouts disabled: do not modify wall mesh for ACs
 
             scene.add(tempWalls);
             setWallsMeshRef(tempWalls);
@@ -531,6 +554,26 @@ const ThermalHouseSimulator = () => {
               updateDoorPosition(draggedDoor, newPosition);
             } else if (draggedDoor.userData.type === "window") {
               updateWindowPosition(draggedDoor, newPosition);
+            } else if (draggedDoor.userData.type === "aircon") {
+              // Discrete preview move: snap to integer grid and call previewMoveAircon
+              const snapped = snapToGrid(newPosition);
+              // previewMoveAircon will apply snap & inset visually
+              try {
+                previewMoveAircon(draggedDoor.userData.id, snapped);
+              } catch (e) {
+                // fallback: set position directly (shouldn't usually happen)
+                const yPos = 2;
+                draggedDoor.position.set(snapped.x, yPos, snapped.z);
+                const inset = HOUSE_CONFIG.wallThickness / 2 + 0.75 / 2;
+                if (draggedDoor.userData.direction === "north")
+                  draggedDoor.position.z += inset;
+                else if (draggedDoor.userData.direction === "south")
+                  draggedDoor.position.z -= inset;
+                else if (draggedDoor.userData.direction === "east")
+                  draggedDoor.position.x -= inset;
+                else if (draggedDoor.userData.direction === "west")
+                  draggedDoor.position.x += inset;
+              }
             }
           }
         }
@@ -554,6 +597,8 @@ const ThermalHouseSimulator = () => {
             toggleWindow(draggedDoor, true);
           } else if (draggedDoor.userData.type === "heater") {
             toggleHeaterState(draggedDoor.userData.id);
+          } else if (draggedDoor.userData.type === "aircon") {
+            toggleAirConditionerState(draggedDoor.userData.id);
           }
         } else if (draggedDoor.userData.isDragging) {
           // Se movió -> actualizar posición en el estado para reconstruir paredes
@@ -571,6 +616,9 @@ const ThermalHouseSimulator = () => {
             );
             const heaterConflict = heaters.some((h) =>
               isHeaterBlockingDoor(h.position, candidate)
+            );
+            const acConflict = acs.some((a) =>
+              isACOverlappingDoor(a, candidate)
             );
             if (conflict) {
               console.warn(
@@ -609,6 +657,24 @@ const ThermalHouseSimulator = () => {
                   prev.position
                 );
               }
+            } else if (acConflict) {
+              console.warn(
+                "Movimiento inválido: la puerta solapa con un aire acondicionado"
+              );
+              const prevPos = draggedDoor.userData.prevPosition;
+              const prev = prevPos
+                ? { position: prevPos }
+                : doors.find((d) => d.id === draggedDoor.userData.id);
+              if (prev && prev.position) {
+                updateDoorPosition(draggedDoor, {
+                  x: prev.position.x,
+                  z: prev.position.z,
+                });
+                updateDoorPositionInState(
+                  draggedDoor.userData.id,
+                  prev.position
+                );
+              }
             } else {
               updateDoorPositionInState(draggedDoor.userData.id, newPos);
             }
@@ -622,6 +688,9 @@ const ThermalHouseSimulator = () => {
             );
             const heaterConflict = heaters.some((h) =>
               isHeaterBlockingWindow(h.position, candidate)
+            );
+            const acConflict = acs.some((a) =>
+              isACOverlappingWindow(a, candidate)
             );
             if (conflict) {
               console.warn(
@@ -644,6 +713,24 @@ const ThermalHouseSimulator = () => {
             } else if (heaterConflict) {
               console.warn(
                 "Movimiento inválido: la ventana quedaría delante de un calefactor"
+              );
+              const prevPos = draggedDoor.userData.prevPosition;
+              const prev = prevPos
+                ? { position: prevPos }
+                : windows.find((w) => w.id === draggedDoor.userData.id);
+              if (prev && prev.position) {
+                updateWindowPosition(draggedDoor, {
+                  x: prev.position.x,
+                  z: prev.position.z,
+                });
+                updateWindowPositionInState(
+                  draggedDoor.userData.id,
+                  prev.position
+                );
+              }
+            } else if (acConflict) {
+              console.warn(
+                "Movimiento inválido: la ventana solapa con un aire acondicionado"
               );
               const prevPos = draggedDoor.userData.prevPosition;
               const prev = prevPos
@@ -693,6 +780,9 @@ const ThermalHouseSimulator = () => {
               const windowConflict = windows.some((w) =>
                 isHeaterBlockingWindow(candidate, w)
               );
+              const acConflict = acs.some((a) =>
+                isHeaterBlockingAC(candidate, a)
+              );
               if (doorConflict || windowConflict) {
                 console.warn(
                   "Movimiento inválido: el calefactor bloquea una puerta o ventana"
@@ -717,6 +807,21 @@ const ThermalHouseSimulator = () => {
                     prev.position
                   );
                 }
+              } else if (acConflict) {
+                console.warn(
+                  "Movimiento inválido: el calefactor bloquearía un aire acondicionado"
+                );
+                const prevPos = draggedDoor.userData.prevPosition;
+                const prev = prevPos
+                  ? { position: prevPos }
+                  : heaters.find((h) => h.id === draggedDoor.userData.id);
+                if (prev && prev.position) {
+                  draggedDoor.position.set(prev.position.x, 0, prev.position.z);
+                  updateHeaterPositionInState(
+                    draggedDoor.userData.id,
+                    prev.position
+                  );
+                }
               } else {
                 updateHeaterPositionInState(draggedDoor.userData.id, newPos);
                 // rotate accepted heater to face center from new position
@@ -734,6 +839,55 @@ const ThermalHouseSimulator = () => {
                 } catch (e) {
                   // ignore
                 }
+              }
+            }
+          } else if (draggedDoor.userData.type === "aircon") {
+            // Commit discrete move with global validation via commitMoveAircon
+            try {
+              console.log("Attempting commitMoveAircon", {
+                acId: draggedDoor.userData.id,
+                newPos,
+                doorsCount: doors.length,
+                windowsCount: windows.length,
+                heatersCount: heaters.length,
+                acsCount: acs.length,
+                acsList: acs,
+              });
+              const ok = commitMoveAircon(draggedDoor.userData.id, newPos, {
+                doors,
+                windows,
+                heaters,
+                acs,
+              });
+              console.debug("commitMoveAircon returned", { ok });
+              if (!ok) {
+                // failed: restore previous logical position in state
+                console.warn(
+                  "commitMoveAircon failed, restoring prev position",
+                  {
+                    acId: draggedDoor.userData.id,
+                    prevPosition: draggedDoor.userData.prevPosition,
+                  }
+                );
+                const prevPos = draggedDoor.userData.prevPosition;
+                const prev = prevPos
+                  ? { position: prevPos }
+                  : acs.find((a) => a.id === draggedDoor.userData.id);
+                if (prev && prev.position) {
+                  updateACPositionInState(
+                    draggedDoor.userData.id,
+                    prev.position
+                  );
+                }
+              }
+            } catch (e) {
+              console.error("commitMoveAircon error (exception)", e);
+              const prevPos = draggedDoor.userData.prevPosition;
+              const prev = prevPos
+                ? { position: prevPos }
+                : acs.find((a) => a.id === draggedDoor.userData.id);
+              if (prev && prev.position) {
+                updateACPositionInState(draggedDoor.userData.id, prev.position);
               }
             }
           }
@@ -789,6 +943,7 @@ const ThermalHouseSimulator = () => {
     if (windows && windows.length > 0) {
       newWalls = applyWindowCutouts(newWalls, windows);
     }
+    // AC cutouts disabled: do not modify walls for aircons
 
     // Añadir a la escena
     scene.add(newWalls);
@@ -812,6 +967,8 @@ const ThermalHouseSimulator = () => {
       const heaterConflict = heaters.some((h) =>
         isHeaterBlockingDoor(h.position, candidate)
       );
+      // comprobar solapamiento con aires acondicionados (montados en pared)
+      const acConflict = acs.some((a) => isACOverlappingDoor(a, candidate));
       if (conflict) {
         console.warn(
           "No se puede añadir la puerta: solapa con una ventana existente"
@@ -821,6 +978,12 @@ const ThermalHouseSimulator = () => {
       if (heaterConflict) {
         console.warn(
           "No se puede añadir la puerta: coloca una puerta delante de un calefactor existente"
+        );
+        return;
+      }
+      if (acConflict) {
+        console.warn(
+          "No se puede añadir la puerta: solapa con un aire acondicionado existente"
         );
         return;
       }
@@ -837,6 +1000,7 @@ const ThermalHouseSimulator = () => {
       const heaterConflict = heaters.some((h) =>
         isHeaterBlockingWindow(h.position, candidate)
       );
+      const acConflict = acs.some((a) => isACOverlappingWindow(a, candidate));
       if (conflict) {
         console.warn(
           "No se puede añadir la ventana: solapa con una puerta existente"
@@ -846,6 +1010,12 @@ const ThermalHouseSimulator = () => {
       if (heaterConflict) {
         console.warn(
           "No se puede añadir la ventana: coloca una ventana delante de un calefactor existente"
+        );
+        return;
+      }
+      if (acConflict) {
+        console.warn(
+          "No se puede añadir la ventana: solapa con un aire acondicionado existente"
         );
         return;
       }
@@ -867,14 +1037,57 @@ const ThermalHouseSimulator = () => {
       const windowConflict = windows.some((w) =>
         isHeaterBlockingWindow(candidatePos, w)
       );
+      const acConflict = acs.some((a) => isHeaterBlockingAC(candidatePos, a));
       if (doorConflict || windowConflict) {
         console.warn(
           "No se puede añadir el calefactor: bloquea una puerta o ventana"
         );
         return;
       }
+      if (acConflict) {
+        console.warn(
+          "No se puede añadir el calefactor: bloquea un aire acondicionado existente"
+        );
+        return;
+      }
       const heater = addHeater(contextMenu.floorPosition);
       if (heater) console.log("🔥 Calefactor añadido desde menú contextual");
+    } else if (componentType === "aircon") {
+      const candidate = {
+        position: contextMenu.wallPosition,
+        direction: contextMenu.direction,
+      };
+      // AC shouldn't overlap doors/windows or heaters
+      const conflict = doors.some((d) => isACOverlappingDoor(candidate, d));
+      const heaterConflict = heaters.some((h) =>
+        isHeaterBlockingAC(h.position, candidate)
+      );
+      const acConflictExisting = acs.some((a) =>
+        isACOverlappingAC(a, candidate)
+      );
+      if (conflict) {
+        console.warn(
+          "No se puede añadir el aire acondicionado: solapa con una puerta existente"
+        );
+        return;
+      }
+      if (heaterConflict) {
+        console.warn(
+          "No se puede añadir el aire acondicionado: coloca un AC delante de un calefactor existente"
+        );
+        return;
+      }
+      if (acConflictExisting) {
+        console.warn(
+          "No se puede añadir el aire acondicionado: solapa con otro AC existente"
+        );
+        return;
+      }
+      const ac = addAirConditioner({
+        position: contextMenu.wallPosition,
+        direction: contextMenu.direction,
+      });
+      if (ac) console.log("❄️ AC añadido desde menú contextual");
     }
   };
 
@@ -887,6 +1100,8 @@ const ThermalHouseSimulator = () => {
       removeWindowFn(objectInfo.id);
     } else if (objectInfo.type === "heater") {
       removeHeater(objectInfo.id);
+    } else if (objectInfo.type === "aircon") {
+      removeAirConditioner(objectInfo.id);
     }
     setContextMenu(null);
   };
@@ -911,11 +1126,12 @@ const ThermalHouseSimulator = () => {
       // aplicar cortes de ventanas sobre el resultado
       newWalls = applyWindowCutouts(newWalls, windows);
     }
+    // AC cutouts disabled: do not modify walls for aircons
 
     // Añadir a la escena
     scene.add(newWalls);
     setWallsMeshRef(newWalls);
-  }, [doors, windows, scene]);
+  }, [doors, windows, acs, scene]);
 
   return (
     <div

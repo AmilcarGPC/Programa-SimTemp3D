@@ -104,6 +104,14 @@ const ContextMenu = ({
               <span>Calefactor</span>
             </button>
 
+            <button
+              className="context-menu-item"
+              onClick={() => handleSelect("aircon")}
+            >
+              <span className="context-menu-icon">❄️</span>
+              <span>Aire Acondicionado</span>
+            </button>
+
             <button className="context-menu-item" disabled title="Próximamente">
               <span className="context-menu-icon">🔥</span>
               <span>Calefactor</span>
