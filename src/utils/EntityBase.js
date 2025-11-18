@@ -3,6 +3,13 @@ import { disposeObject } from "./disposeUtils";
 import { snapToGrid } from "./doorUtils";
 
 /**
+ * EntityBase
+ * ---------
+ * Base class for scene entities (doors, windows, heaters, aircons, ...).
+ * All entities have standardized toggle() and updateAnimation() methods.
+ */
+
+/**
  * Clase base para entidades 3D (puertas, ventanas, calefactores, etc.)
  * Extiende THREE.Group y expone una API mínima: toggle, updateAnimation, dispose.
  */
@@ -34,7 +41,7 @@ export class EntityBase extends THREE.Group {
     this._validator = null; // external validator function (entity, world) => boolean
   }
 
-  // Alterna el estado básico; subclasses pueden sobreescribir onToggle
+  // Alterna el estado; subclasses pueden sobreescribir onToggle
   toggle(instant = false) {
     this.userData.isActive = !this.userData.isActive;
     if (instant) {
@@ -45,9 +52,9 @@ export class EntityBase extends THREE.Group {
     if (typeof this.onToggle === "function") this.onToggle(instant);
   }
 
-  // Método que se llama cada frame para actualizar la animación; override en subclass
+  // Método que se llama cada frame para actualizar la animación; subclasses lo implementan
   updateAnimation() {
-    // noop por defecto
+    // noop por defecto, subclasses lo sobreescriben
   }
 
   // Movimiento/validación básica
@@ -55,7 +62,7 @@ export class EntityBase extends THREE.Group {
     this._validator = fn;
   }
 
-  // Devuelve true por defecto; subclasses pueden override para validaciones locales
+  // Devuelve true por defecto; subclasses lo sobreescriben para validaciones específicas
   validatePosition(world = null, basePos = null) {
     return true;
   }
@@ -70,66 +77,23 @@ export class EntityBase extends THREE.Group {
       ? { ...this.userData.basePosition }
       : { x: this.position.x, z: this.position.z };
 
-    try {
-      console.debug("EntityBase.moveTo start", {
-        id: this.userData.id,
-        type: this.userData.type,
-        newPos,
-        snapped,
-        snap,
-        validate,
-      });
-    } catch (e) {}
-
-    // Run validator if provided
     if (validate) {
       if (typeof this._validator === "function") {
         const ok = this._validator(this, { world, basePosition: snapped });
-        try {
-          console.debug("EntityBase.moveTo _validator result", {
-            id: this.userData.id,
-            ok,
-          });
-        } catch (e) {}
         if (!ok) return false;
       } else {
         const ok = this.validatePosition(world, snapped);
-        try {
-          console.debug("EntityBase.moveTo validatePosition result", {
-            id: this.userData.id,
-            ok,
-          });
-        } catch (e) {}
         if (!ok) return false;
       }
     }
 
-    // Commit base position and set world position temporarily to base
     this._prevBasePosition = oldBase;
     this.userData.basePosition = { x: snapped.x, z: snapped.z };
     this.position.set(snapped.x, this.position.y, snapped.z);
 
-    // Allow subclass to finalize world offset / pivot adjustments
     if (typeof this.onMove === "function") {
-      try {
-        this.onMove(oldBase, { x: snapped.x, z: snapped.z }, { instant });
-      } catch (e) {
-        // ignore
-      }
+      this.onMove(oldBase, { x: snapped.x, z: snapped.z }, { instant });
     }
-
-    try {
-      console.debug("EntityBase.moveTo success", {
-        id: this.userData.id,
-        type: this.userData.type,
-        basePosition: this.userData.basePosition,
-        worldPosition: {
-          x: this.position.x,
-          y: this.position.y,
-          z: this.position.z,
-        },
-      });
-    } catch (e) {}
 
     return true;
   }

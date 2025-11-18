@@ -166,7 +166,8 @@ class DoorEntity extends EntityBase {
     this.userData.type = "door";
     this.userData.id = id || this.userData.id;
     this.userData.direction = direction;
-    this.userData.isOpen = false;
+    // canonical state flag
+    this.userData.isActive = false;
     this.userData.targetAngle = 0;
     this.userData.currentAngle = 0;
 
@@ -213,12 +214,10 @@ class DoorEntity extends EntityBase {
 
     this.rotation.y = getDoorRotation(direction);
 
-    // Animación/Toggle handlers
+    // Animación/Toggle handlers (based on canonical `isActive`)
     this.onToggle = (instant = false) => {
-      this.userData.isOpen = !this.userData.isOpen;
-      this.userData.targetAngle = this.userData.isOpen
-        ? DOOR_CONFIG.openAngle
-        : 0;
+      const isOpen = !!this.userData.isActive;
+      this.userData.targetAngle = isOpen ? DOOR_CONFIG.openAngle : 0;
       if (instant && this.userData.pivotGroup) {
         this.userData.currentAngle = this.userData.targetAngle;
         this.userData.pivotGroup.rotation.y = this.userData.targetAngle;
@@ -369,33 +368,9 @@ export const applyDoorCutouts = (wallsMesh, doorPositions) => {
  * @param {THREE.Group} doorGroup - El grupo de la puerta
  */
 export const updateDoorAnimation = (doorGroup) => {
-  if (!doorGroup || !doorGroup.userData) return;
-
-  // Si la instancia provee su propio updateAnimation (p.ej. DoorEntity), delegar
+  if (!doorGroup?.userData) return;
   if (typeof doorGroup.updateAnimation === "function") {
-    try {
-      doorGroup.updateAnimation();
-      return;
-    } catch (e) {
-      // fallthrough to legacy behaviour
-    }
-  }
-
-  const { pivotGroup, currentAngle = 0, targetAngle = 0 } = doorGroup.userData;
-  if (!pivotGroup) return;
-
-  if (Math.abs(currentAngle - targetAngle) > 0.01) {
-    const diff = targetAngle - currentAngle;
-    const step = Math.sign(diff) * (DOOR_CONFIG.animationSpeed || 0.05);
-
-    doorGroup.userData.currentAngle =
-      (doorGroup.userData.currentAngle || 0) + step;
-
-    if (Math.abs(doorGroup.userData.currentAngle - targetAngle) < 0.01) {
-      doorGroup.userData.currentAngle = targetAngle;
-    }
-
-    pivotGroup.rotation.y = doorGroup.userData.currentAngle;
+    doorGroup.updateAnimation();
   }
 };
 
@@ -405,25 +380,9 @@ export const updateDoorAnimation = (doorGroup) => {
  * @param {boolean} instant - Si es true, cambia sin animación
  */
 export const toggleDoor = (doorGroup, instant = false) => {
-  if (!doorGroup || !doorGroup.userData) return;
-
+  if (!doorGroup?.userData) return;
   if (typeof doorGroup.toggle === "function") {
-    try {
-      doorGroup.toggle(instant);
-      return;
-    } catch (e) {
-      // fallthrough to legacy behaviour
-    }
-  }
-
-  doorGroup.userData.isOpen = !doorGroup.userData.isOpen;
-  doorGroup.userData.targetAngle = doorGroup.userData.isOpen
-    ? DOOR_CONFIG.openAngle
-    : 0;
-
-  if (instant && doorGroup.userData.pivotGroup) {
-    doorGroup.userData.currentAngle = doorGroup.userData.targetAngle;
-    doorGroup.userData.pivotGroup.rotation.y = doorGroup.userData.targetAngle;
+    doorGroup.toggle(instant);
   }
 };
 

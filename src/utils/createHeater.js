@@ -16,9 +16,10 @@ export const createHeater = ({ position, id }) => {
   const height = 1.5;
 
   class HeaterEntity extends EntityBase {
-    constructor({ position: pos, id: instanceId } = {}) {
-      super({ type: "heater", id: instanceId, position: pos });
-      this.userData.isOn = false;
+    constructor({ position, id } = {}) {
+      super({ type: "heater", id, position });
+      // canonical state flag
+      this.userData.isActive = false;
 
       // ===== CUERPO PRINCIPAL =====
       const bodyMat = new THREE.MeshStandardMaterial({
@@ -126,7 +127,7 @@ export const createHeater = ({ position, id }) => {
 
       // Exponer métodos para toggle y animación
       this.onToggle = (instant = false) => {
-        const isOn = (this.userData.isOn = !this.userData.isOn);
+        const isOn = !!this.userData.isActive;
         if (this.userData.led && this.userData.led.material) {
           if (isOn) {
             this.userData.led.material.color.set(0x0088ff);
@@ -153,12 +154,12 @@ export const createHeater = ({ position, id }) => {
       };
 
       this.updateAnimation = () => {
-        // placeholder for future animations (e.g., pulsing LED)
+        // placeholder para futuras animaciones (e.g., LED pulsante)
       };
 
       // Posicionar según posición (snap a grid)
-      if (pos) {
-        const snapped = snapToGrid(pos);
+      if (position) {
+        const snapped = snapToGrid(position);
         this.position.set(snapped.x, 0, snapped.z);
       }
     }
@@ -167,52 +168,16 @@ export const createHeater = ({ position, id }) => {
   return new HeaterEntity({ position, id });
 };
 
-export const toggleHeater = (heaterGroup) => {
-  if (!heaterGroup || !heaterGroup.userData) return;
+export const toggleHeater = (heaterGroup, instant = false) => {
+  if (!heaterGroup?.userData) return;
   if (typeof heaterGroup.toggle === "function") {
-    // If it's an EntityBase instance, use its toggle (keeps instant semantics)
-    heaterGroup.toggle();
-    return;
-  }
-
-  // Backwards compatible fallback
-  const isOn = !heaterGroup.userData.isOn;
-  heaterGroup.userData.isOn = isOn;
-  const led = heaterGroup.userData.led;
-  const light = heaterGroup.userData.ledLight;
-  if (led && led.material) {
-    if (isOn) {
-      led.material.color.set(0x0088ff);
-      led.material.emissive.set(0x0088ff);
-      led.material.emissiveIntensity = 1.2;
-    } else {
-      led.material.color.set(0xff0000);
-      led.material.emissive.set(0xff0000);
-      led.material.emissiveIntensity = 0.6;
-    }
-  }
-  if (light) {
-    if (isOn) {
-      light.color.set(0x0088ff);
-      light.intensity = 1.0;
-      light.visible = true;
-    } else {
-      light.color.set(0xff0000);
-      light.intensity = 0.5;
-      light.visible = true;
-    }
+    heaterGroup.toggle(instant);
   }
 };
 
 export const updateHeaterAnimation = (heaterGroup) => {
-  if (!heaterGroup || !heaterGroup.userData) return;
+  if (!heaterGroup?.userData) return;
   if (typeof heaterGroup.updateAnimation === "function") {
-    try {
-      heaterGroup.updateAnimation();
-      return;
-    } catch (e) {
-      // fallthrough to noop
-    }
+    heaterGroup.updateAnimation();
   }
-  // legacy noop
 };

@@ -69,56 +69,38 @@ export const useAirConditioners = (scene) => {
             c.userData && c.userData.type === "aircon" && c.userData.id === acId
         );
       if (obj) {
-        try {
-          toggleAirConditioner(obj);
-        } catch (e) {
-          console.warn("toggleAirConditioner failed", e);
-        }
+        toggleAirConditioner(obj);
       }
     },
     [scene]
   );
 
   const updateACPositionInState = useCallback((id, pos) => {
-    console.debug("updateACPositionInState called", { id, pos });
     setAcs((prev) =>
       prev.map((a) => (a.id === id ? { ...a, position: pos } : a))
     );
-    // Also update the scene object position (apply inset and fixed height)
     const obj = acObjectsRef.current.get(id);
     if (obj) {
-      try {
-        const prevBase = obj.userData.basePosition || {
-          x: obj.position.x,
-          z: obj.position.z,
-        };
-        if (typeof obj.onMove === "function") {
-          obj.onMove(prevBase, pos);
-        } else {
-          // fallback: set world position using wall half-thickness + half AC depth
-          const inset =
-            HOUSE_CONFIG.wallThickness / 2 + (obj.userData?.depth || 0.75) / 2;
-          const yPos = 2;
-          obj.position.set(pos.x, yPos, pos.z);
-          if (obj.userData.direction === "north") obj.position.z += inset;
-          else if (obj.userData.direction === "south") obj.position.z -= inset;
-          else if (obj.userData.direction === "east") obj.position.x -= inset;
-          else if (obj.userData.direction === "west") obj.position.x += inset;
-        }
-        // store basePosition for future moves
-        obj.userData.basePosition = { x: pos.x, z: pos.z };
-        console.debug("updateACPositionInState applied to scene obj", {
-          id,
-          worldPos: obj.position,
-          basePosition: obj.userData.basePosition,
-        });
-      } catch (e) {
-        // ignore
+      const prevBase = obj.userData.basePosition || {
+        x: obj.position.x,
+        z: obj.position.z,
+      };
+      if (typeof obj.onMove === "function") {
+        obj.onMove(prevBase, pos);
+      } else {
+        const inset =
+          HOUSE_CONFIG.wallThickness / 2 + (obj.userData?.depth || 0.75) / 2;
+        const yPos = 2;
+        obj.position.set(pos.x, yPos, pos.z);
+        if (obj.userData.direction === "north") obj.position.z += inset;
+        else if (obj.userData.direction === "south") obj.position.z -= inset;
+        else if (obj.userData.direction === "east") obj.position.x -= inset;
+        else if (obj.userData.direction === "west") obj.position.x += inset;
       }
+      obj.userData.basePosition = { x: pos.x, z: pos.z };
     }
   }, []);
 
-  // Preview move: snap and move visually without global validation
   const previewMoveAircon = useCallback(
     (acId, newBasePos) => {
       const obj =
@@ -128,48 +110,37 @@ export const useAirConditioners = (scene) => {
             c.userData && c.userData.type === "aircon" && c.userData.id === acId
         );
       if (!obj) return false;
-      try {
-        console.debug("previewMoveAircon", { acId, newBasePos });
-        // When dragging along a wall we must preserve the wall-fixed axis
-        // (doors/windows do this). For north/south walls keep z fixed,
-        // for east/west keep x fixed. Use the stored basePosition as the
-        // locked coordinate if available.
-        const base = obj.userData.basePosition || {
-          x: obj.position.x,
-          z: obj.position.z,
-        };
-        const dir = obj.userData.direction;
-        const isNS = dir === "north" || dir === "south";
-        const adjusted = {
-          x: isNS ? newBasePos.x : base.x,
-          z: isNS ? base.z : newBasePos.z,
-        };
-        const snapped = snapToGrid(adjusted);
 
-        const ok =
-          typeof obj.moveTo === "function"
-            ? obj.moveTo(snapped, {
-                validate: false,
-                snap: true,
-                instant: true,
-              })
-            : false;
-        console.debug("previewMoveAircon moveTo returned", { acId, ok });
-        if (ok) {
-          const p = obj.toInfo().position;
-          console.debug("previewMoveAircon will update state pos", { acId, p });
-          updateACPositionInState(acId, p);
-        }
-        return ok;
-      } catch (e) {
-        console.error("previewMoveAircon error", e);
-        return false;
+      const base = obj.userData.basePosition || {
+        x: obj.position.x,
+        z: obj.position.z,
+      };
+      const dir = obj.userData.direction;
+      const isNS = dir === "north" || dir === "south";
+      const adjusted = {
+        x: isNS ? newBasePos.x : base.x,
+        z: isNS ? base.z : newBasePos.z,
+      };
+      const snapped = snapToGrid(adjusted);
+
+      const ok =
+        typeof obj.moveTo === "function"
+          ? obj.moveTo(snapped, {
+              validate: false,
+              snap: true,
+              instant: true,
+            })
+          : false;
+
+      if (ok) {
+        const p = obj.toInfo().position;
+        updateACPositionInState(acId, p);
       }
+      return ok;
     },
     [scene, updateACPositionInState]
   );
 
-  // Commit move: validate collisions against provided world context and persist or revert
   const commitMoveAircon = useCallback(
     (
       acId,
@@ -183,8 +154,7 @@ export const useAirConditioners = (scene) => {
             c.userData && c.userData.type === "aircon" && c.userData.id === acId
         );
       if (!obj) return false;
-      // basic validation: must be on a valid wall edge
-      // Adjust finalBasePos to lock the wall-fixed axis (same behavior as doors/windows)
+
       const base = obj.userData.basePosition || {
         x: obj.position.x,
         z: obj.position.z,
@@ -200,143 +170,83 @@ export const useAirConditioners = (scene) => {
         position: adjustedFinal,
         direction: obj.userData.direction,
       };
-      console.debug("commitMoveAircon start", {
-        acId,
-        originalFinal: finalBasePos,
-        finalBase: adjustedFinal,
+
+      const validPos = isValidWindowPosition({
+        ...adjustedFinal,
         direction: obj.userData.direction,
       });
-      try {
-        // check position validity using window/door rules
-        const validPos = isValidWindowPosition({
-          ...adjustedFinal,
-          direction: obj.userData.direction,
-        });
-        console.debug("commitMoveAircon validPos", { validPos });
-        if (!validPos) {
-          console.debug("commitMoveAircon invalid position, reverting", {
-            acId,
-            finalBasePos: adjustedFinal,
-          });
-          if (typeof obj.revertPosition === "function") obj.revertPosition();
-          return false;
-        }
 
-        // Check overlaps with doors and windows using widths (AC has its own width)
-        const acHalf = (obj.userData?.width || 2.5) / 2;
-        const acCenter = isNS ? adjustedFinal.x : adjustedFinal.z;
-
-        // doors
-        const doorHalf = (DOOR_CONFIG.width || 1.5) / 2;
-        const windowHalf = (WINDOW_CONFIG.width || 2) / 2;
-
-        const doorConflict = (doors || []).some((d) => {
-          if (!d || d.direction !== dir) return false;
-          const center = isNS ? d.position.x : d.position.z;
-          const overlap = Math.abs(center - acCenter) < doorHalf + acHalf;
-          if (overlap)
-            console.debug("commitMoveAircon door overlap", { d, acId });
-          return overlap;
-        });
-
-        const windowConflict = (windows || []).some((w) => {
-          if (!w || w.direction !== dir) return false;
-          const center = isNS ? w.position.x : w.position.z;
-          const overlap = Math.abs(center - acCenter) < windowHalf + acHalf;
-          if (overlap)
-            console.debug("commitMoveAircon window overlap", { w, acId });
-          return overlap;
-        });
-
-        const heaterConflict = (heaters || []).some((h) =>
-          isHeaterBlockingAC(h.position, candidate)
-        );
-
-        // AC vs AC conflict: check existing ACs (exclude self)
-        const acConflict = (otherAcs || []).some((a) => {
-          try {
-            // a may be stored as {id, position, direction} in state
-            return isACOverlappingAC(a, {
-              id: acId,
-              position: adjustedFinal,
-              direction: dir,
-            });
-          } catch (e) {
-            return false;
-          }
-        });
-
-        console.debug("commitMoveAircon conflicts", {
-          doorConflict,
-          windowConflict,
-          heaterConflict,
-          acConflict,
-        });
-
-        if (doorConflict || windowConflict || heaterConflict || acConflict) {
-          console.debug("commitMoveAircon conflicts detected, reverting", {
-            doorConflict,
-            windowConflict,
-            heaterConflict,
-            acConflict,
-          });
-          if (typeof obj.revertPosition === "function") obj.revertPosition();
-          return false;
-        }
-
-        // commit final position
-        console.debug("commitMoveAircon attempting moveTo", {
-          acId,
-          finalBasePos: adjustedFinal,
-        });
-        const ok =
-          typeof obj.moveTo === "function"
-            ? obj.moveTo(adjustedFinal, { validate: false, snap: true })
-            : false;
-        console.debug("commitMoveAircon moveTo returned", { acId, ok });
-        if (ok) {
-          const p = obj.toInfo().position;
-          console.debug("commitMoveAircon committing position", { acId, p });
-          updateACPositionInState(acId, p);
-          // store basePosition on the object for future moves
-          obj.userData.basePosition = { x: p.x, z: p.z };
-          return true;
-        }
-        console.debug("commitMoveAircon moveTo failed, reverting", { acId });
+      if (!validPos) {
         if (typeof obj.revertPosition === "function") obj.revertPosition();
         return false;
-      } catch (e) {
-        try {
-          if (typeof obj.revertPosition === "function") obj.revertPosition();
-        } catch (e) {}
-        console.error("commitMoveAircon error", e);
+      }
+
+      const acHalf = (obj.userData?.width || 2.5) / 2;
+      const acCenter = isNS ? adjustedFinal.x : adjustedFinal.z;
+
+      const doorHalf = (DOOR_CONFIG.width || 1.5) / 2;
+      const windowHalf = (WINDOW_CONFIG.width || 2) / 2;
+
+      const doorConflict = (doors || []).some((d) => {
+        if (!d || d.direction !== dir) return false;
+        const center = isNS ? d.position.x : d.position.z;
+        return Math.abs(center - acCenter) < doorHalf + acHalf;
+      });
+
+      const windowConflict = (windows || []).some((w) => {
+        if (!w || w.direction !== dir) return false;
+        const center = isNS ? w.position.x : w.position.z;
+        return Math.abs(center - acCenter) < windowHalf + acHalf;
+      });
+
+      const heaterConflict = (heaters || []).some((h) =>
+        isHeaterBlockingAC(h.position, candidate)
+      );
+
+      const acConflict = (otherAcs || []).some((a) => {
+        return isACOverlappingAC(a, {
+          id: acId,
+          position: adjustedFinal,
+          direction: dir,
+        });
+      });
+
+      if (doorConflict || windowConflict || heaterConflict || acConflict) {
+        if (typeof obj.revertPosition === "function") obj.revertPosition();
         return false;
       }
+
+      const ok =
+        typeof obj.moveTo === "function"
+          ? obj.moveTo(adjustedFinal, { validate: false, snap: true })
+          : false;
+
+      if (ok) {
+        const p = obj.toInfo().position;
+        updateACPositionInState(acId, p);
+        obj.userData.basePosition = { x: p.x, z: p.z };
+        return true;
+      }
+
+      if (typeof obj.revertPosition === "function") obj.revertPosition();
+      return false;
     },
     [scene, updateACPositionInState]
   );
 
   const clearAllACs = useCallback(() => {
     if (!scene) return;
-    acObjectsRef.current.forEach((obj) => {
-      try {
-        scene.remove(obj);
-      } catch (e) {
-        console.warn("useAirConditioners: error removing ac from scene", e);
-      }
-    });
+    for (const obj of acObjectsRef.current.values()) {
+      scene.remove(obj);
+    }
     acObjectsRef.current.clear();
     setAcs([]);
   }, [scene]);
 
   const updateAnimations = useCallback(() => {
-    acObjectsRef.current.forEach((a) => {
-      try {
-        updateAirConditionerAnimation(a);
-      } catch (e) {
-        // ignore
-      }
-    });
+    for (const a of acObjectsRef.current.values()) {
+      updateAirConditionerAnimation(a);
+    }
   }, []);
 
   useEffect(() => {

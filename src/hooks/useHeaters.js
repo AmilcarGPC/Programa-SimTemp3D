@@ -76,11 +76,7 @@ export const useHeaters = (scene) => {
             c.userData.id === heaterId
         );
       if (heaterObj) {
-        try {
-          toggleHeater(heaterObj);
-        } catch (e) {
-          console.warn("toggleHeaterState failed", e);
-        }
+        toggleHeater(heaterObj);
       }
     },
     [scene]
@@ -94,25 +90,17 @@ export const useHeaters = (scene) => {
 
   const clearAllHeaters = useCallback(() => {
     if (!scene) return;
-    heaterObjectsRef.current.forEach((obj) => {
-      try {
-        scene.remove(obj);
-      } catch (e) {
-        console.warn("useHeaters: error removing heater from scene", e);
-      }
-    });
+    for (const obj of heaterObjectsRef.current.values()) {
+      scene.remove(obj);
+    }
     heaterObjectsRef.current.clear();
     setHeaters([]);
   }, [scene]);
 
   const updateAnimations = useCallback(() => {
-    heaterObjectsRef.current.forEach((h) => {
-      try {
-        updateHeaterAnimation(h);
-      } catch (e) {
-        // ignore
-      }
-    });
+    for (const h of heaterObjectsRef.current.values()) {
+      updateHeaterAnimation(h);
+    }
   }, []);
 
   useEffect(() => {

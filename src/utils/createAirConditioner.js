@@ -105,10 +105,11 @@ const createACLed = () => {
 };
 
 class AirConditionerEntity extends EntityBase {
-  constructor({ position: pos, direction: dir, id: instanceId } = {}) {
-    super({ type: "aircon", id: instanceId, position: pos });
-    this.userData.direction = dir;
-    this.userData.isOn = false;
+  constructor({ position, direction, id } = {}) {
+    super({ type: "aircon", id, position });
+    this.userData.direction = direction;
+    // canonical state flag
+    this.userData.isActive = false;
 
     const { group: bodyGroup, body, grilleGroup } = createACBody();
     const { led, ledLight } = createACLed();
@@ -120,53 +121,58 @@ class AirConditionerEntity extends EntityBase {
     this.userData.led = led;
     this.userData.ledLight = ledLight;
     this.userData.grille = grilleGroup;
-    this.userData.depth = AC_CONFIG.depth;
     this.userData.width = AC_CONFIG.width;
     this.userData.depth = AC_CONFIG.depth;
 
     // Position: fixed height 2 meters from floor (walls are 3m high)
     const yPos = 2;
-    this.position.set(pos.x, yPos, pos.z);
+    if (position) {
+      this.position.set(position.x, yPos, position.z);
+    } else {
+      this.position.y = yPos;
+    }
 
     // Offset according to wall direction so unit sits flush on interior side.
     // Use wall half-thickness + half AC depth so the AC center is correctly inset from wall center.
     const inset = HOUSE_CONFIG.wallThickness + AC_CONFIG.depth / 2;
-    if (dir === WINDOW_DIRECTIONS.NORTH) {
+    if (this.userData.direction === WINDOW_DIRECTIONS.NORTH) {
       this.position.z += inset;
-    } else if (dir === WINDOW_DIRECTIONS.SOUTH) {
+    } else if (this.userData.direction === WINDOW_DIRECTIONS.SOUTH) {
       this.position.z -= inset;
-    } else if (dir === WINDOW_DIRECTIONS.EAST) {
+    } else if (this.userData.direction === WINDOW_DIRECTIONS.EAST) {
       this.position.x -= inset;
-    } else if (dir === WINDOW_DIRECTIONS.WEST) {
+    } else if (this.userData.direction === WINDOW_DIRECTIONS.WEST) {
       this.position.x += inset;
     }
 
-    this.rotation.y = getWindowRotation(dir);
+    this.rotation.y = getWindowRotation(this.userData.direction);
 
-    // Toggle: turn LED color/intensity and light on/off
+    // Toggle: update visuals based on canonical `isActive`
     this.onToggle = (instant = false) => {
-      this.userData.isOn = !this.userData.isOn;
-      const isOn = this.userData.isOn;
-      if (this.userData.led && this.userData.led.material) {
+      const isOn = !!this.userData.isActive;
+      // no alias; visuals driven from canonical `isActive`
+      const led = this.userData.led;
+      const ledLight = this.userData.ledLight;
+      if (led && led.material) {
         if (isOn) {
-          this.userData.led.material.color.set(0x66ccff);
-          this.userData.led.material.emissive.set(0x66ccff);
-          this.userData.led.material.emissiveIntensity = 1.2;
+          led.material.color.set(0x66ccff);
+          led.material.emissive.set(0x66ccff);
+          led.material.emissiveIntensity = 1.2;
         } else {
-          this.userData.led.material.color.set(0xff0000);
-          this.userData.led.material.emissive.set(0xff0000);
-          this.userData.led.material.emissiveIntensity = 0.3;
+          led.material.color.set(0xff0000);
+          led.material.emissive.set(0xff0000);
+          led.material.emissiveIntensity = 0.3;
         }
       }
-      if (this.userData.ledLight) {
+      if (ledLight) {
         if (isOn) {
-          this.userData.ledLight.color.set(0x66ccff);
-          this.userData.ledLight.intensity = 1.0;
-          this.userData.ledLight.visible = true;
+          ledLight.color.set(0x66ccff);
+          ledLight.intensity = 1.0;
+          ledLight.visible = true;
         } else {
-          this.userData.ledLight.color.set(0xff0000);
-          this.userData.ledLight.intensity = 0.2;
-          this.userData.ledLight.visible = true;
+          ledLight.color.set(0xff0000);
+          ledLight.intensity = 0.2;
+          ledLight.visible = true;
         }
       }
     };
@@ -176,7 +182,7 @@ class AirConditionerEntity extends EntityBase {
       const led = this.userData.led;
       const light = this.userData.ledLight;
       if (!led || !light) return;
-      if (this.userData.isOn) {
+      if (this.userData.isActive) {
         const t = Date.now() * 0.001;
         const pulse =
           0.8 +
@@ -238,49 +244,16 @@ export const createAirConditioner = ({ position, direction, id } = {}) => {
   return new AirConditionerEntity({ position, direction, id });
 };
 
-export const toggleAirConditioner = (acGroup) => {
-  if (!acGroup || !acGroup.userData) return;
+export const toggleAirConditioner = (acGroup, instant = false) => {
+  if (!acGroup?.userData) return;
   if (typeof acGroup.toggle === "function") {
-    acGroup.toggle();
-    return;
-  }
-  // fallback
-  const isOn = !acGroup.userData.isOn;
-  acGroup.userData.isOn = isOn;
-  const led = acGroup.userData.led;
-  const light = acGroup.userData.ledLight;
-  if (led && led.material) {
-    if (isOn) {
-      led.material.color.set(0x66ccff);
-      led.material.emissive.set(0x66ccff);
-      led.material.emissiveIntensity = 1.2;
-    } else {
-      led.material.color.set(0xff0000);
-      led.material.emissive.set(0xff0000);
-      led.material.emissiveIntensity = 0.3;
-    }
-  }
-  if (light) {
-    if (isOn) {
-      light.color.set(0x66ccff);
-      light.intensity = 1.0;
-      light.visible = true;
-    } else {
-      light.color.set(0xff0000);
-      light.intensity = 0.2;
-      light.visible = true;
-    }
+    acGroup.toggle(instant);
   }
 };
 
 export const updateAirConditionerAnimation = (acGroup) => {
-  if (!acGroup || !acGroup.userData) return;
+  if (!acGroup?.userData) return;
   if (typeof acGroup.updateAnimation === "function") {
-    try {
-      acGroup.updateAnimation();
-      return;
-    } catch (e) {
-      // fallback noop
-    }
+    acGroup.updateAnimation();
   }
 };

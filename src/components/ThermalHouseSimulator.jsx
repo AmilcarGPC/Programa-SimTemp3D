@@ -257,7 +257,8 @@ const ThermalHouseSimulator = () => {
           group &&
           (group.userData.type === "door" ||
             group.userData.type === "window" ||
-            group.userData.type === "heater")
+            group.userData.type === "heater" ||
+            group.userData.type === "aircon")
         ) {
           setContextMenu({
             x: event.clientX,

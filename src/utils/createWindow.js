@@ -139,10 +139,11 @@ const createWindowCutout = () => {
  * Clase WindowEntity que encapsula una ventana con persiana y luz interior.
  */
 class WindowEntity extends EntityBase {
-  constructor({ position: pos, direction: dir, id: instanceId } = {}) {
-    super({ type: "window", id: instanceId, position: pos });
-    this.userData.direction = dir;
-    this.userData.isOpen = false;
+  constructor({ position, direction, id } = {}) {
+    super({ type: "window", id: id, position: position });
+    this.userData.direction = direction;
+    // canonical state flag
+    this.userData.isActive = false;
     this.userData.targetAngle = 0;
     this.userData.currentAngle = 0;
 
@@ -190,27 +191,31 @@ class WindowEntity extends EntityBase {
     this.userData.shutterTargetY = shutterClosedY;
     this.userData.shutterCurrentY = shutterClosedY;
 
-    this.position.set(pos.x, WINDOW_CONFIG.sillHeight, pos.z);
+    if (position) {
+      this.position.set(position.x, WINDOW_CONFIG.sillHeight, position.z);
+    } else {
+      this.position.y = WINDOW_CONFIG.sillHeight;
+    }
 
-    if (dir === WINDOW_DIRECTIONS.NORTH) {
+    if (this.userData.direction === WINDOW_DIRECTIONS.NORTH) {
       this.position.z += HOUSE_CONFIG.wallThickness / 2;
-    } else if (dir === WINDOW_DIRECTIONS.SOUTH) {
+    } else if (this.userData.direction === WINDOW_DIRECTIONS.SOUTH) {
       this.position.z -= HOUSE_CONFIG.wallThickness / 2;
-    } else if (dir === WINDOW_DIRECTIONS.EAST) {
+    } else if (this.userData.direction === WINDOW_DIRECTIONS.EAST) {
       this.position.x -= HOUSE_CONFIG.wallThickness / 2;
-    } else if (dir === WINDOW_DIRECTIONS.WEST) {
+    } else if (this.userData.direction === WINDOW_DIRECTIONS.WEST) {
       this.position.x += HOUSE_CONFIG.wallThickness / 2;
     }
 
-    this.rotation.y = getWindowRotation(dir);
+    this.rotation.y = getWindowRotation(this.userData.direction);
 
     this.onToggle = (instant = false) => {
-      this.userData.isOpen = !this.userData.isOpen;
-      const targetY = this.userData.isOpen
+      const isOpen = !!this.userData.isActive;
+      const targetY = isOpen
         ? this.userData.shutterOpenY
         : this.userData.shutterClosedY;
       this.userData.shutterTargetY = targetY;
-      this.userData.lightTarget = this.userData.isOpen ? 2.5 : 0.0;
+      this.userData.lightTarget = isOpen ? 2.5 : 0.0;
       if (instant && this.userData.shutterGroup) {
         this.userData.shutterCurrentY = targetY;
         this.userData.shutterGroup.children.forEach((c) => {
@@ -348,89 +353,15 @@ export const applyWindowCutouts = (wallsMesh, windowPositions) => {
 };
 
 export const updateWindowAnimation = (windowGroup) => {
-  if (!windowGroup || !windowGroup.userData) return;
-
+  if (!windowGroup?.userData) return;
   if (typeof windowGroup.updateAnimation === "function") {
-    try {
-      windowGroup.updateAnimation();
-      return;
-    } catch (e) {
-      // fallthrough to legacy behaviour
-    }
-  }
-
-  const {
-    shutterGroup,
-    shutterCurrentY = 0,
-    shutterTargetY = 0,
-  } = windowGroup.userData;
-  if (!shutterGroup) return;
-  // Interpolar posición Y de la persiana
-  if (Math.abs(shutterCurrentY - shutterTargetY) > 0.01) {
-    const diff = shutterTargetY - shutterCurrentY;
-    const step = Math.sign(diff) * (WINDOW_CONFIG.animationSpeed || 0.04);
-    windowGroup.userData.shutterCurrentY =
-      (windowGroup.userData.shutterCurrentY || 0) + step;
-    if (Math.abs(windowGroup.userData.shutterCurrentY - shutterTargetY) < 0.01)
-      windowGroup.userData.shutterCurrentY = shutterTargetY;
-    // Aplicar al mesh de la persiana (primer hijo del grupo)
-    shutterGroup.children.forEach((c) => {
-      c.position.y = windowGroup.userData.shutterCurrentY;
-    });
-  }
-  // (no emissive plane animation — removed to keep exterior view clear)
-
-  // Animar la intensidad de la luz puntual interior si existe
-  const pointLight = windowGroup.userData.pointLight;
-  if (pointLight) {
-    const lc = windowGroup.userData.lightCurrent || 0;
-    const lt = windowGroup.userData.lightTarget || 0;
-    if (Math.abs(lc - lt) > 0.01) {
-      // paso más pequeño para suavidad, multiplicado para mayor sensación de intensidad
-      const step = (WINDOW_CONFIG.animationSpeed || 0.04) * 1.2;
-      const next = lc + Math.sign(lt - lc) * step;
-      windowGroup.userData.lightCurrent = Math.abs(next) < 0.001 ? 0 : next;
-      // Permitir mayor intensidad y clamp para evitar valores extremos
-      pointLight.intensity = THREE.MathUtils.clamp(
-        windowGroup.userData.lightCurrent,
-        0,
-        3.5
-      );
-      pointLight.visible = pointLight.intensity > 0.001;
-    }
+    windowGroup.updateAnimation();
   }
 };
 
 export const toggleWindow = (windowGroup, instant = false) => {
-  if (!windowGroup || !windowGroup.userData) return;
-
+  if (!windowGroup?.userData) return;
   if (typeof windowGroup.toggle === "function") {
-    try {
-      windowGroup.toggle(instant);
-      return;
-    } catch (e) {
-      // fallthrough to legacy behaviour
-    }
-  }
-
-  windowGroup.userData.isOpen = !windowGroup.userData.isOpen;
-  const targetY = windowGroup.userData.isOpen
-    ? windowGroup.userData.shutterOpenY
-    : windowGroup.userData.shutterClosedY;
-  windowGroup.userData.shutterTargetY = targetY;
-  // la luz interior usa un target más alto pero con distance/decay limitado para que no afecte el exterior
-  windowGroup.userData.lightTarget = windowGroup.userData.isOpen ? 2.5 : 0.0;
-  if (instant && windowGroup.userData.shutterGroup) {
-    windowGroup.userData.shutterCurrentY = targetY;
-    windowGroup.userData.shutterGroup.children.forEach((c) => {
-      c.position.y = targetY;
-    });
-    if (windowGroup.userData.pointLight) {
-      windowGroup.userData.lightCurrent = windowGroup.userData.lightTarget;
-      windowGroup.userData.pointLight.intensity =
-        windowGroup.userData.lightTarget;
-      windowGroup.userData.pointLight.visible =
-        windowGroup.userData.pointLight.intensity > 0.001;
-    }
+    windowGroup.toggle(instant);
   }
 };

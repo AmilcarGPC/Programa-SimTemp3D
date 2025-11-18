@@ -12,6 +12,19 @@ const ContextMenu = ({
 }) => {
   if (!position) return null;
 
+  const typeMap = {
+    door: { icon: "🚪", label: "Puerta" },
+    window: { icon: "🪟", label: "Ventana" },
+    heater: { icon: "🔥", label: "Calefactor" },
+    aircon: { icon: "❄️", label: "Aire Acondicionado" },
+  };
+  const objInfo = position.object
+    ? typeMap[position.object.type] || {
+        icon: "❓",
+        label: position.object.type || "Objeto",
+      }
+    : null;
+
   const handleSelect = (componentType) => {
     onSelectComponent(componentType);
     onClose();
@@ -51,12 +64,8 @@ const ContextMenu = ({
             <div className="context-menu-header">Objeto</div>
             <div className="context-menu-divider" />
             <div className="context-menu-item">
-              <span className="context-menu-icon">
-                {position.object.type === "door" ? "🚪" : "🪟"}
-              </span>
-              <span>
-                {position.object.type === "door" ? "Puerta" : "Ventana"}
-              </span>
+              <span className="context-menu-icon">{objInfo.icon}</span>
+              <span>{objInfo.label}</span>
             </div>
 
             <div className="context-menu-divider" />
@@ -110,11 +119,6 @@ const ContextMenu = ({
             >
               <span className="context-menu-icon">❄️</span>
               <span>Aire Acondicionado</span>
-            </button>
-
-            <button className="context-menu-item" disabled title="Próximamente">
-              <span className="context-menu-icon">🔥</span>
-              <span>Calefactor</span>
             </button>
 
             <div className="context-menu-divider" />
