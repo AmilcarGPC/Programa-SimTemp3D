@@ -3,9 +3,11 @@ import { HOUSE_CONFIG } from "../config/sceneConfig";
 import { EntityBase } from "./EntityBase";
 import {
   WINDOW_DIRECTIONS,
-  isValidWindowPosition,
+  isOnWall,
   getWindowRotation,
-} from "./windowUtils";
+  updateWindowPosition,
+} from "./entityUtils";
+import { validateCandidate, buildOthers } from "./entityCollision";
 
 // Tamaño solicitado: 2.5 x 0.75 x 0.75 (ancho x alto x profundidad)
 export const AC_CONFIG = {
@@ -203,14 +205,45 @@ class AirConditionerEntity extends EntityBase {
 
   validatePosition(world = null, basePos = null) {
     // reuse window/door edge validation: AC sits on wall, so same constraints
+
     const pos = basePos ||
       this.userData.basePosition || { x: this.position.x, z: this.position.z };
-    // Ensure the unit is located on an allowed wall edge (not on floor)
-    return isValidWindowPosition({
+
+    // canonical candidate placed on wall edge depending on direction
+    const candidate = {
       x: pos.x,
       z: pos.z,
       direction: this.userData.direction,
-    });
+    };
+    if (this.userData.direction === WINDOW_DIRECTIONS.NORTH) {
+      candidate.z = -5;
+    } else if (this.userData.direction === WINDOW_DIRECTIONS.SOUTH) {
+      candidate.z = 5;
+    } else if (this.userData.direction === WINDOW_DIRECTIONS.EAST) {
+      candidate.x = 5;
+    } else if (this.userData.direction === WINDOW_DIRECTIONS.WEST) {
+      candidate.x = -5;
+    }
+
+    // basic geometry checks (wall-edge)
+    if (!isOnWall(candidate)) return false;
+
+    if (!world) return true;
+
+    // Normalize candidate and build others list from provided world object
+    const candidateFull = {
+      type: "aircon",
+      position: { x: candidate.x, z: candidate.z },
+      direction: candidate.direction,
+      id: this.userData.id,
+    };
+
+    try {
+      const others = buildOthers(world, this.userData.id);
+      return validateCandidate(candidateFull, others);
+    } catch (e) {
+      return false;
+    }
   }
 
   onMove(oldBase, newBase, opts = {}) {
@@ -219,13 +252,13 @@ class AirConditionerEntity extends EntityBase {
     this.position.set(newBase.x, yPos, newBase.z);
     const inset = HOUSE_CONFIG.wallThickness + AC_CONFIG.depth / 2;
     if (this.userData.direction === WINDOW_DIRECTIONS.NORTH) {
-      this.position.z += inset;
+      this.position.z = -5 + inset;
     } else if (this.userData.direction === WINDOW_DIRECTIONS.SOUTH) {
-      this.position.z -= inset;
+      this.position.z = 5 - inset;
     } else if (this.userData.direction === WINDOW_DIRECTIONS.EAST) {
-      this.position.x -= inset;
+      this.position.x = 5 - inset;
     } else if (this.userData.direction === WINDOW_DIRECTIONS.WEST) {
-      this.position.x += inset;
+      this.position.x = -5 + inset;
     }
   }
 }
@@ -237,12 +270,15 @@ export const createAirConditioner = ({ position, direction, id } = {}) => {
     return null;
   }
 
-  if (!isValidWindowPosition({ ...position, direction })) {
+  if (!isOnWall({ ...position, direction })) {
     console.warn("Invalid AC position:", position, direction);
     return null;
   }
   return new AirConditionerEntity({ position, direction, id });
 };
+
+// Pre-creation validation without instantiating 3D objects
+// NOTE: pre-creation validation moved into AirConditionerEntity.validatePosition
 
 export const toggleAirConditioner = (acGroup, instant = false) => {
   if (!acGroup?.userData) return;

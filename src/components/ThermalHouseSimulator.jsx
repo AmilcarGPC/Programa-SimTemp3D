@@ -10,29 +10,39 @@ import { usePostProcessing } from "../hooks/usePostProcessing";
 import { useWindowResize } from "../hooks/useWindowResize";
 import { useAnimationLoop } from "../hooks/useAnimationLoop";
 import { useThermalEffects } from "../hooks/useThermalEffects";
-import { useDoors } from "../hooks/useDoors";
-import { useWindows } from "../hooks/useWindows";
-import { useHeaters } from "../hooks/useHeaters";
-import { useAirConditioners } from "../hooks/useAirConditioners";
+import useEntities from "../hooks/useEntities";
+import { createHeater } from "../utils/createHeater";
+import { createAirConditioner } from "../utils/createAirConditioner";
 import { createGround } from "../utils/createGround";
 import { createTrees } from "../utils/createTree";
 import { createHouse } from "../utils/createHouse";
-import { applyDoorCutouts, toggleDoor } from "../utils/createDoor";
-import { applyWindowCutouts, toggleWindow } from "../utils/createWindow";
-import { updateDoorPosition, snapToGrid } from "../utils/doorUtils";
-import { updateWindowPosition } from "../utils/windowUtils";
+import {
+  createDoor,
+  applyDoorCutouts,
+  updateDoorAnimation,
+  toggleDoor,
+} from "../utils/createDoor";
+import {
+  createWindow,
+  applyWindowCutouts,
+  updateWindowAnimation,
+  toggleWindow,
+} from "../utils/createWindow";
+import {
+  updateDoorPosition,
+  snapToGrid,
+  updateWindowPosition,
+} from "../utils/entityUtils";
 import { disposeObject } from "../utils/disposeUtils";
 import {
-  isDoorWindowOverlapping,
-  isHeaterBlockingDoor,
-  isHeaterBlockingWindow,
-  isACOverlappingDoor,
-  isACOverlappingWindow,
-  isACOverlappingAC,
-  isHeaterBlockingAC,
-} from "../utils/overlapUtils";
-import { WINDOW_CONFIG } from "../config/sceneConfig";
-import { TREE_POSITIONS, UI_CONFIG, HOUSE_CONFIG } from "../config/sceneConfig";
+  WINDOW_CONFIG,
+  DOOR_CONFIG,
+  TREE_POSITIONS,
+  UI_CONFIG,
+  HOUSE_CONFIG,
+} from "../config/sceneConfig";
+import { validateCandidate } from "../utils/entityCollision";
+// `isOnWall` and positioning helpers imported above from entityUtils
 import { Brush, Evaluator, SUBTRACTION } from "three-bvh-csg";
 
 const ThermalHouseSimulator = () => {
@@ -58,52 +68,73 @@ const ThermalHouseSimulator = () => {
   // Hook para efectos visuales térmicos
   useThermalEffects(scene, tempExterna, tempInterna);
 
-  // Hook para gestionar puertas
-  const {
-    doors,
-    placementMode,
-    selectedDirection,
-    setPlacementMode,
-    setSelectedDirection,
-    addDoor,
-    removeDoor,
-    toggleDoorState,
-    updateDoorPositionInState,
-    clearAllDoors,
-  } = useDoors(scene, wallsMeshRef);
+  // Door state previously provided by useDoors wrapper
+  const [placementMode, setPlacementMode] = React.useState(false);
+  const [selectedDirection, setSelectedDirection] = React.useState("north");
 
-  // Hook para gestionar ventanas
   const {
-    windows,
-    addWindow,
-    removeWindow: removeWindowFn,
-    toggleWindowState,
-    updateWindowPositionInState,
-    rebuildWalls: rebuildWindowWalls,
-    clearAllWindows,
-  } = useWindows(scene, wallsMeshRef);
+    items: doors,
+    addItem: addDoor,
+    removeItem: removeDoor,
+    toggleItem: toggleDoorState,
+    updateItemPositionInState: updateDoorPositionInState,
+    previewMoveItem: previewMoveDoor,
+    commitMoveItem: commitMoveDoor,
+    clearAllItems: clearAllDoors,
+    objectsRef: doorObjectsRef,
+  } = useEntities(scene, {
+    type: "door",
+    createEntity: ({ position, direction, id } = {}) =>
+      createDoor({ position, direction, id }),
+  });
 
-  // Hook para gestionar calefactores
+  // Windows
   const {
-    heaters,
-    addHeater,
-    removeHeater,
-    toggleHeaterState,
-    updateHeaterPositionInState,
-    clearAllHeaters,
-  } = useHeaters(scene);
+    items: windows,
+    addItem: addWindow,
+    removeItem: removeWindowFn,
+    toggleItem: toggleWindowState,
+    updateItemPositionInState: updateWindowPositionInState,
+    previewMoveItem: previewMoveWindow,
+    commitMoveItem: commitMoveWindow,
+    clearAllItems: clearAllWindows,
+    objectsRef: windowObjectsRef,
+  } = useEntities(scene, {
+    type: "window",
+    createEntity: ({ position, direction, id } = {}) =>
+      createWindow({ position, direction, id }),
+  });
+
+  // Hook para gestionar calefactores (usando useEntities genérico)
+  const {
+    items: heaters,
+    addItem: addHeater,
+    removeItem: removeHeater,
+    toggleItem: toggleHeaterState,
+    updateItemPositionInState: updateHeaterPositionInState,
+    commitMoveItem: commitMoveHeater,
+    clearAllItems: clearAllHeaters,
+  } = useEntities(scene, {
+    type: "heater",
+    createEntity: ({ position, id } = {}) => createHeater({ position, id }),
+  });
 
   // Hook para gestionar aires acondicionados (wall-mounted)
   const {
-    acs,
-    addAirConditioner,
-    removeAirConditioner,
-    toggleAirConditionerState,
-    updateACPositionInState,
-    clearAllACs,
-    previewMoveAircon,
-    commitMoveAircon,
-  } = useAirConditioners(scene);
+    items: acs,
+    addItem: addAirConditioner,
+    removeItem: removeAirConditioner,
+    toggleItem: toggleAirConditionerState,
+    updateItemPositionInState: updateACPositionInState,
+    previewMoveItem: previewMoveAircon,
+    commitMoveItem: commitMoveAircon,
+    clearAllItems: clearAllACs,
+  } = useEntities(scene, {
+    type: "aircon",
+    createEntity: ({ position, direction, id } = {}) =>
+      createAirConditioner({ position, direction, id }),
+  });
+
   // Inicializar la escena con objetos 3D
   useEffect(() => {
     if (!scene) return;
@@ -607,230 +638,72 @@ const ThermalHouseSimulator = () => {
             x: draggedDoor.position.x,
             z: draggedDoor.position.z,
           });
-          if (draggedDoor.userData.type === "door") {
-            const candidate = {
-              position: newPos,
-              direction: draggedDoor.userData.direction,
-            };
-            const conflict = windows.some((w) =>
-              isDoorWindowOverlapping(candidate, w)
-            );
-            const heaterConflict = heaters.some((h) =>
-              isHeaterBlockingDoor(h.position, candidate)
-            );
-            const acConflict = acs.some((a) =>
-              isACOverlappingDoor(a, candidate)
-            );
-            if (conflict) {
-              console.warn(
-                "Movimiento inválido: la puerta solapa con una ventana"
-              );
-              // revertir a la posición anterior usando los helpers (actualiza escena + estado)
-              const prevPos = draggedDoor.userData.prevPosition;
-              const prev = prevPos
-                ? { position: prevPos }
-                : doors.find((d) => d.id === draggedDoor.userData.id);
-              if (prev && prev.position) {
-                updateDoorPosition(draggedDoor, {
-                  x: prev.position.x,
-                  z: prev.position.z,
-                });
-                updateDoorPositionInState(
-                  draggedDoor.userData.id,
-                  prev.position
-                );
-              }
-            } else if (heaterConflict) {
-              console.warn(
-                "Movimiento inválido: la puerta quedaría delante de un calefactor"
-              );
-              const prevPos = draggedDoor.userData.prevPosition;
-              const prev = prevPos
-                ? { position: prevPos }
-                : doors.find((d) => d.id === draggedDoor.userData.id);
-              if (prev && prev.position) {
-                updateDoorPosition(draggedDoor, {
-                  x: prev.position.x,
-                  z: prev.position.z,
-                });
-                updateDoorPositionInState(
-                  draggedDoor.userData.id,
-                  prev.position
-                );
-              }
-            } else if (acConflict) {
-              console.warn(
-                "Movimiento inválido: la puerta solapa con un aire acondicionado"
-              );
-              const prevPos = draggedDoor.userData.prevPosition;
-              const prev = prevPos
-                ? { position: prevPos }
-                : doors.find((d) => d.id === draggedDoor.userData.id);
-              if (prev && prev.position) {
-                updateDoorPosition(draggedDoor, {
-                  x: prev.position.x,
-                  z: prev.position.z,
-                });
-                updateDoorPositionInState(
-                  draggedDoor.userData.id,
-                  prev.position
-                );
-              }
-            } else {
-              updateDoorPositionInState(draggedDoor.userData.id, newPos);
-            }
-          } else if (draggedDoor.userData.type === "window") {
-            const candidate = {
-              position: newPos,
-              direction: draggedDoor.userData.direction,
-            };
-            const conflict = doors.some((d) =>
-              isDoorWindowOverlapping(d, candidate)
-            );
-            const heaterConflict = heaters.some((h) =>
-              isHeaterBlockingWindow(h.position, candidate)
-            );
-            const acConflict = acs.some((a) =>
-              isACOverlappingWindow(a, candidate)
-            );
-            if (conflict) {
-              console.warn(
-                "Movimiento inválido: la ventana solapa con una puerta"
-              );
-              const prevPos = draggedDoor.userData.prevPosition;
-              const prev = prevPos
-                ? { position: prevPos }
-                : windows.find((w) => w.id === draggedDoor.userData.id);
-              if (prev && prev.position) {
-                updateWindowPosition(draggedDoor, {
-                  x: prev.position.x,
-                  z: prev.position.z,
-                });
-                updateWindowPositionInState(
-                  draggedDoor.userData.id,
-                  prev.position
-                );
-              }
-            } else if (heaterConflict) {
-              console.warn(
-                "Movimiento inválido: la ventana quedaría delante de un calefactor"
-              );
-              const prevPos = draggedDoor.userData.prevPosition;
-              const prev = prevPos
-                ? { position: prevPos }
-                : windows.find((w) => w.id === draggedDoor.userData.id);
-              if (prev && prev.position) {
-                updateWindowPosition(draggedDoor, {
-                  x: prev.position.x,
-                  z: prev.position.z,
-                });
-                updateWindowPositionInState(
-                  draggedDoor.userData.id,
-                  prev.position
-                );
-              }
-            } else if (acConflict) {
-              console.warn(
-                "Movimiento inválido: la ventana solapa con un aire acondicionado"
-              );
-              const prevPos = draggedDoor.userData.prevPosition;
-              const prev = prevPos
-                ? { position: prevPos }
-                : windows.find((w) => w.id === draggedDoor.userData.id);
-              if (prev && prev.position) {
-                updateWindowPosition(draggedDoor, {
-                  x: prev.position.x,
-                  z: prev.position.z,
-                });
-                updateWindowPositionInState(
-                  draggedDoor.userData.id,
-                  prev.position
-                );
-              }
-            } else {
-              updateWindowPositionInState(draggedDoor.userData.id, newPos);
-            }
-          } else if (draggedDoor.userData.type === "heater") {
-            // Se movió un calefactor -> comprobar límites dentro de la casa y solapamientos
-            const heaterBoundary = 4; // límite permitido: ±4 en X/Z
-            const withinBoundary =
-              Math.abs(newPos.x) <= heaterBoundary &&
-              Math.abs(newPos.z) <= heaterBoundary;
-
-            if (!withinBoundary) {
-              console.warn(
-                "Movimiento inválido: el calefactor queda fuera del área permitida ±4"
-              );
-              // revertir a la posición anterior
-              const prevPos = draggedDoor.userData.prevPosition;
-              const prev = prevPos
-                ? { position: prevPos }
-                : heaters.find((h) => h.id === draggedDoor.userData.id);
-              if (prev && prev.position) {
-                draggedDoor.position.set(prev.position.x, 0, prev.position.z);
-                updateHeaterPositionInState(
-                  draggedDoor.userData.id,
-                  prev.position
-                );
-              }
-            } else {
-              const candidate = { x: newPos.x, z: newPos.z };
-              const doorConflict = doors.some((d) =>
-                isHeaterBlockingDoor(candidate, d)
-              );
-              const windowConflict = windows.some((w) =>
-                isHeaterBlockingWindow(candidate, w)
-              );
-              const acConflict = acs.some((a) =>
-                isHeaterBlockingAC(candidate, a)
-              );
-              if (doorConflict || windowConflict) {
-                console.warn(
-                  "Movimiento inválido: el calefactor bloquea una puerta o ventana"
-                );
-                // revertir a la posición anterior
+          console.log("New Pos:", newPos);
+          // Delegate validation & commit to the entity hooks
+          const type = draggedDoor.userData.type;
+          const id = draggedDoor.userData.id;
+          try {
+            if (type === "door") {
+              const ok = commitMoveDoor(id, newPos, {
+                doors,
+                windows,
+                heaters,
+                acs,
+              });
+              if (!ok) {
                 const prevPos = draggedDoor.userData.prevPosition;
                 const prev = prevPos
                   ? { position: prevPos }
-                  : heaters.find((h) => h.id === draggedDoor.userData.id);
+                  : doors.find((d) => d.id === id);
                 if (prev && prev.position) {
-                  draggedDoor.position.set(prev.position.x, 0, prev.position.z);
-                  // rotate to face center from reverted position
-                  try {
-                    const raw = Math.atan2(-prev.position.x, -prev.position.z);
-                    const step = Math.PI / 2;
-                    draggedDoor.rotation.y = Math.round(raw / step) * step;
-                  } catch (e) {
-                    // ignore
-                  }
-                  updateHeaterPositionInState(
-                    draggedDoor.userData.id,
-                    prev.position
-                  );
+                  updateDoorPosition(draggedDoor, {
+                    x: prev.position.x,
+                    z: prev.position.z,
+                  });
+                  updateDoorPositionInState(id, prev.position);
                 }
-              } else if (acConflict) {
-                console.warn(
-                  "Movimiento inválido: el calefactor bloquearía un aire acondicionado"
-                );
+              }
+            } else if (type === "window") {
+              const ok = commitMoveWindow(id, newPos, {
+                doors,
+                windows,
+                heaters,
+                acs,
+              });
+              if (!ok) {
                 const prevPos = draggedDoor.userData.prevPosition;
                 const prev = prevPos
                   ? { position: prevPos }
-                  : heaters.find((h) => h.id === draggedDoor.userData.id);
+                  : windows.find((w) => w.id === id);
+                if (prev && prev.position) {
+                  updateWindowPosition(draggedDoor, {
+                    x: prev.position.x,
+                    z: prev.position.z,
+                  });
+                  updateWindowPositionInState(id, prev.position);
+                }
+              }
+            } else if (type === "heater") {
+              const ok = commitMoveHeater(id, newPos, {
+                doors,
+                windows,
+                heaters,
+                acs,
+              });
+              if (!ok) {
+                const prevPos = draggedDoor.userData.prevPosition;
+                const prev = prevPos
+                  ? { position: prevPos }
+                  : heaters.find((h) => h.id === id);
                 if (prev && prev.position) {
                   draggedDoor.position.set(prev.position.x, 0, prev.position.z);
-                  updateHeaterPositionInState(
-                    draggedDoor.userData.id,
-                    prev.position
-                  );
+                  updateHeaterPositionInState(id, prev.position);
                 }
               } else {
-                updateHeaterPositionInState(draggedDoor.userData.id, newPos);
                 // rotate accepted heater to face center from new position
                 try {
                   const obj = scene.children.find(
-                    (c) =>
-                      c.userData?.type === "heater" &&
-                      c.userData.id === draggedDoor.userData.id
+                    (c) => c.userData?.type === "heater" && c.userData.id === id
                   );
                   if (obj) {
                     const raw = Math.atan2(-newPos.x, -newPos.z);
@@ -841,55 +714,36 @@ const ThermalHouseSimulator = () => {
                   // ignore
                 }
               }
-            }
-          } else if (draggedDoor.userData.type === "aircon") {
-            // Commit discrete move with global validation via commitMoveAircon
-            try {
-              console.log("Attempting commitMoveAircon", {
-                acId: draggedDoor.userData.id,
-                newPos,
-                doorsCount: doors.length,
-                windowsCount: windows.length,
-                heatersCount: heaters.length,
-                acsCount: acs.length,
-                acsList: acs,
-              });
-              const ok = commitMoveAircon(draggedDoor.userData.id, newPos, {
+            } else if (type === "aircon") {
+              const ok = commitMoveAircon(id, newPos, {
                 doors,
                 windows,
                 heaters,
                 acs,
               });
-              console.debug("commitMoveAircon returned", { ok });
               if (!ok) {
-                // failed: restore previous logical position in state
-                console.warn(
-                  "commitMoveAircon failed, restoring prev position",
-                  {
-                    acId: draggedDoor.userData.id,
-                    prevPosition: draggedDoor.userData.prevPosition,
-                  }
-                );
                 const prevPos = draggedDoor.userData.prevPosition;
                 const prev = prevPos
                   ? { position: prevPos }
-                  : acs.find((a) => a.id === draggedDoor.userData.id);
+                  : acs.find((a) => a.id === id);
                 if (prev && prev.position) {
-                  updateACPositionInState(
-                    draggedDoor.userData.id,
-                    prev.position
-                  );
+                  updateACPositionInState(id, prev.position);
                 }
               }
-            } catch (e) {
-              console.error("commitMoveAircon error (exception)", e);
-              const prevPos = draggedDoor.userData.prevPosition;
-              const prev = prevPos
-                ? { position: prevPos }
-                : acs.find((a) => a.id === draggedDoor.userData.id);
-              if (prev && prev.position) {
-                updateACPositionInState(draggedDoor.userData.id, prev.position);
-              }
+            }
+          } catch (e) {
+            // restore previous on unexpected error
+            const prevPos = draggedDoor.userData.prevPosition;
+            const prev = prevPos ? { position: prevPos } : null;
+            if (prev && prev.position) {
+              if (draggedDoor.userData.type === "door")
+                updateDoorPositionInState(id, prev.position);
+              else if (draggedDoor.userData.type === "window")
+                updateWindowPositionInState(id, prev.position);
+              else if (draggedDoor.userData.type === "aircon")
+                updateACPositionInState(id, prev.position);
+              else if (draggedDoor.userData.type === "heater")
+                updateHeaterPositionInState(id, prev.position);
             }
           }
         }
@@ -960,35 +814,22 @@ const ThermalHouseSimulator = () => {
         position: contextMenu.wallPosition,
         direction: contextMenu.direction,
       };
-      // comprobar solapamiento con ventanas existentes
-      const conflict = windows.some((w) =>
-        isDoorWindowOverlapping(candidate, w)
-      );
-      // comprobar solapamiento con calefactores (no pueden estar enfrente)
-      const heaterConflict = heaters.some((h) =>
-        isHeaterBlockingDoor(h.position, candidate)
-      );
-      // comprobar solapamiento con aires acondicionados (montados en pared)
-      const acConflict = acs.some((a) => isACOverlappingDoor(a, candidate));
-      if (conflict) {
+      const candidateFull = {
+        type: "door",
+        position: contextMenu.wallPosition,
+        direction: contextMenu.direction,
+      };
+      const others = [...windows, ...heaters, ...acs];
+      if (!validateCandidate(candidateFull, others)) {
         console.warn(
-          "No se puede añadir la puerta: solapa con una ventana existente"
+          "No se puede añadir la puerta: conflicto con otra entidad"
         );
         return;
       }
-      if (heaterConflict) {
-        console.warn(
-          "No se puede añadir la puerta: coloca una puerta delante de un calefactor existente"
-        );
-        return;
-      }
-      if (acConflict) {
-        console.warn(
-          "No se puede añadir la puerta: solapa con un aire acondicionado existente"
-        );
-        return;
-      }
-      const door = addDoor(contextMenu.wallPosition, contextMenu.direction);
+      const door = addDoor({
+        position: contextMenu.wallPosition,
+        direction: contextMenu.direction,
+      });
       if (door) {
         console.log("🚪 Puerta añadida desde menú contextual");
       }
@@ -997,30 +838,24 @@ const ThermalHouseSimulator = () => {
         position: contextMenu.wallPosition,
         direction: contextMenu.direction,
       };
-      const conflict = doors.some((d) => isDoorWindowOverlapping(d, candidate));
-      const heaterConflict = heaters.some((h) =>
-        isHeaterBlockingWindow(h.position, candidate)
-      );
-      const acConflict = acs.some((a) => isACOverlappingWindow(a, candidate));
-      if (conflict) {
+      const candidateFull = {
+        type: "window",
+        position: contextMenu.wallPosition,
+        direction: contextMenu.direction,
+      };
+      const others = [...doors, ...heaters, ...acs];
+      if (!validateCandidate(candidateFull, others)) {
         console.warn(
-          "No se puede añadir la ventana: solapa con una puerta existente"
+          "No se puede añadir la ventana: conflicto con otra entidad"
         );
         return;
       }
-      if (heaterConflict) {
-        console.warn(
-          "No se puede añadir la ventana: coloca una ventana delante de un calefactor existente"
-        );
-        return;
-      }
-      if (acConflict) {
-        console.warn(
-          "No se puede añadir la ventana: solapa con un aire acondicionado existente"
-        );
-        return;
-      }
-      const win = addWindow(contextMenu.wallPosition, contextMenu.direction);
+      console.log("WWI", contextMenu.wallPosition, contextMenu.direction);
+      const win = addWindow({
+        position: contextMenu.wallPosition,
+        direction: contextMenu.direction,
+      });
+      console.log("AA");
       if (win) {
         console.log("🪟 Ventana añadida desde menú contextual");
       }
@@ -1032,55 +867,32 @@ const ThermalHouseSimulator = () => {
       }
       // Check overlap with doors/windows before placing
       const candidatePos = contextMenu.floorPosition;
-      const doorConflict = doors.some((d) =>
-        isHeaterBlockingDoor(candidatePos, d)
-      );
-      const windowConflict = windows.some((w) =>
-        isHeaterBlockingWindow(candidatePos, w)
-      );
-      const acConflict = acs.some((a) => isHeaterBlockingAC(candidatePos, a));
-      if (doorConflict || windowConflict) {
+      const candidateFull = { type: "heater", position: candidatePos };
+      const others = [...doors, ...windows, ...acs];
+      if (!validateCandidate(candidateFull, others)) {
         console.warn(
-          "No se puede añadir el calefactor: bloquea una puerta o ventana"
+          "No se puede añadir el calefactor: conflicto con otra entidad"
         );
         return;
       }
-      if (acConflict) {
-        console.warn(
-          "No se puede añadir el calefactor: bloquea un aire acondicionado existente"
-        );
-        return;
-      }
-      const heater = addHeater(contextMenu.floorPosition);
+      const heater = addHeater({
+        position: contextMenu.floorPosition,
+      });
       if (heater) console.log("🔥 Calefactor añadido desde menú contextual");
     } else if (componentType === "aircon") {
       const candidate = {
         position: contextMenu.wallPosition,
         direction: contextMenu.direction,
       };
-      // AC shouldn't overlap doors/windows or heaters
-      const conflict = doors.some((d) => isACOverlappingDoor(candidate, d));
-      const heaterConflict = heaters.some((h) =>
-        isHeaterBlockingAC(h.position, candidate)
-      );
-      const acConflictExisting = acs.some((a) =>
-        isACOverlappingAC(a, candidate)
-      );
-      if (conflict) {
+      const candidateFull = {
+        type: "aircon",
+        position: contextMenu.wallPosition,
+        direction: contextMenu.direction,
+      };
+      const others = [...doors, ...windows, ...heaters, ...acs];
+      if (!validateCandidate(candidateFull, others)) {
         console.warn(
-          "No se puede añadir el aire acondicionado: solapa con una puerta existente"
-        );
-        return;
-      }
-      if (heaterConflict) {
-        console.warn(
-          "No se puede añadir el aire acondicionado: coloca un AC delante de un calefactor existente"
-        );
-        return;
-      }
-      if (acConflictExisting) {
-        console.warn(
-          "No se puede añadir el aire acondicionado: solapa con otro AC existente"
+          "No se puede añadir el aire acondicionado: conflicto con otra entidad"
         );
         return;
       }

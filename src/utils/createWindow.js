@@ -3,12 +3,13 @@ import { SUBTRACTION, Brush, Evaluator } from "three-bvh-csg";
 import { HOUSE_CONFIG, WINDOW_CONFIG } from "../config/sceneConfig";
 import {
   WINDOW_DIRECTIONS,
-  isValidWindowPosition,
+  isOnWall,
   getWindowRotation,
   snapToGrid,
   updateWindowPosition,
-} from "./windowUtils";
+} from "./entityUtils";
 import { EntityBase } from "./EntityBase";
+import { validateCandidate, buildOthers } from "./entityCollision";
 
 /**
  * Crea el marco de la ventana
@@ -270,11 +271,31 @@ class WindowEntity extends EntityBase {
   validatePosition(world = null, basePos = null) {
     const pos = basePos ||
       this.userData.basePosition || { x: this.position.x, z: this.position.z };
-    return isValidWindowPosition({
-      x: pos.x,
-      z: pos.z,
+    if (
+      !isOnWall({
+        x: pos.x,
+        z: pos.z,
+        direction: this.userData.direction,
+      })
+    ) {
+      return false;
+    }
+
+    if (!world) return true;
+
+    const candidateFull = {
+      type: "window",
+      position: { x: pos.x, z: pos.z },
       direction: this.userData.direction,
-    });
+      id: this.userData.id,
+    };
+
+    try {
+      const others = buildOthers(world, this.userData.id);
+      return validateCandidate(candidateFull, others);
+    } catch (e) {
+      return false;
+    }
   }
 
   // Ajustes al mover: delegar al helper para aplicar offsets (sillHeight, wallThickness)
@@ -288,7 +309,8 @@ class WindowEntity extends EntityBase {
 }
 
 export const createWindow = ({ position, direction, id } = {}) => {
-  if (!isValidWindowPosition({ ...position, direction })) {
+  console.log("CW", position, direction);
+  if (!isOnWall({ ...position, direction })) {
     console.warn("Invalid window position:", position, direction);
     return null;
   }
@@ -296,7 +318,6 @@ export const createWindow = ({ position, direction, id } = {}) => {
 };
 
 // WindowEntity and factory created earlier; createWindow factory returns WindowEntity instance
-
 export const applyWindowCutouts = (wallsMesh, windowPositions) => {
   if (!windowPositions || windowPositions.length === 0) return wallsMesh;
   const evaluator = new Evaluator();

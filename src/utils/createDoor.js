@@ -2,14 +2,14 @@ import * as THREE from "three";
 import { SUBTRACTION, Brush, Evaluator } from "three-bvh-csg";
 import { HOUSE_CONFIG, DOOR_CONFIG } from "../config/sceneConfig";
 import { createWallMaterial } from "./createHouse";
+import { EntityBase } from "./EntityBase";
+import { validateCandidate, buildOthers } from "./entityCollision";
 import {
   DOOR_DIRECTIONS,
-  isValidDoorPosition,
+  isOnWall,
   getDoorRotation,
-  snapToGrid,
   updateDoorPosition,
-} from "./doorUtils";
-import { EntityBase } from "./EntityBase";
+} from "./entityUtils";
 
 // DOOR_CONFIG ahora se exporta desde `src/config/sceneConfig.js`
 
@@ -147,9 +147,7 @@ const createDoorCutout = () => {
   return cutoutBrush;
 };
 
-// `isValidDoorPosition` moved to `utils/doorUtils.js`
-
-// `getDoorRotation` moved to `utils/doorUtils.js`
+// `isOnWall` and rotation helpers now live in `utils/entityUtils.js`
 
 /**
  * Clase DoorEntity que encapsula la puerta y su comportamiento.
@@ -157,7 +155,7 @@ const createDoorCutout = () => {
 class DoorEntity extends EntityBase {
   constructor({ position, direction, id } = {}) {
     super({ type: "door", id, position });
-    if (!isValidDoorPosition({ ...position, direction })) {
+    if (!isOnWall({ ...position, direction })) {
       // marcar como inválida para que la fábrica pueda decidir
       this._invalid = true;
       return;
@@ -260,11 +258,31 @@ class DoorEntity extends EntityBase {
   validatePosition(world = null, basePos = null) {
     const pos = basePos ||
       this.userData.basePosition || { x: this.position.x, z: this.position.z };
-    return isValidDoorPosition({
-      x: pos.x,
-      z: pos.z,
+    if (
+      !isOnWall({
+        x: pos.x,
+        z: pos.z,
+        direction: this.userData.direction,
+      })
+    ) {
+      return false;
+    }
+
+    if (!world) return true;
+
+    const candidateFull = {
+      type: "door",
+      position: { x: pos.x, z: pos.z },
       direction: this.userData.direction,
-    });
+      id: this.userData.id,
+    };
+
+    try {
+      const others = buildOthers(world, this.userData.id);
+      return validateCandidate(candidateFull, others);
+    } catch (e) {
+      return false;
+    }
   }
 
   // Cuando la entidad se mueve (commit), aplicar ajustes adicionales
