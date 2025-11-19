@@ -220,7 +220,8 @@ class DoorEntity extends EntityBase {
       this.userData.targetAngle = target;
       // Apply instantly: set current angle and rotation immediately
       this.userData.currentAngle = target;
-      if (this.userData.pivotGroup) this.userData.pivotGroup.rotation.y = target;
+      if (this.userData.pivotGroup)
+        this.userData.pivotGroup.rotation.y = target;
     };
 
     this.updateAnimation = () => {
