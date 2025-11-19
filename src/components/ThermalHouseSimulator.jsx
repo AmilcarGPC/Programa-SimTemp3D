@@ -36,6 +36,7 @@ import {
   snapToGrid,
   updateWindowPosition,
 } from "../utils/entityUtils";
+
 import { disposeObject } from "../utils/disposeUtils";
 import { WINDOW_CONFIG, DOOR_CONFIG } from "../config/entityConfig";
 import { TREE_POSITIONS, UI_CONFIG, HOUSE_CONFIG } from "../config/sceneConfig";
@@ -591,18 +592,7 @@ const ThermalHouseSimulator = () => {
               try {
                 previewMoveAircon(draggedDoor.userData.id, snapped);
               } catch (e) {
-                // fallback: set position directly (shouldn't usually happen)
-                const yPos = 2;
-                draggedDoor.position.set(snapped.x, yPos, snapped.z);
-                const inset = HOUSE_CONFIG.wallThickness / 2 + 0.75 / 2;
-                if (draggedDoor.userData.direction === "north")
-                  draggedDoor.position.z += inset;
-                else if (draggedDoor.userData.direction === "south")
-                  draggedDoor.position.z -= inset;
-                else if (draggedDoor.userData.direction === "east")
-                  draggedDoor.position.x -= inset;
-                else if (draggedDoor.userData.direction === "west")
-                  draggedDoor.position.x += inset;
+                console.log("Preview move aircon error:", e);
               }
             }
           }

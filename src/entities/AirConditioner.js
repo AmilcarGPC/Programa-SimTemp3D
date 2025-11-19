@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { HOUSE_CONFIG } from "../config/sceneConfig";
+import { AC_CONFIG } from "../config/entityConfig";
 import { EntityBase } from "./EntityBase";
 import {
   WINDOW_DIRECTIONS,
@@ -8,17 +9,6 @@ import {
   updateWindowPosition,
 } from "../utils/entityUtils";
 import { validateCandidate, buildOthers } from "../utils/entityCollision";
-
-// Tamaño solicitado: 2.5 x 0.75 x 0.75 (ancho x alto x profundidad)
-export const AC_CONFIG = {
-  width: 2.5,
-  height: 0.75,
-  depth: 0.75,
-  ledRadius: 0.06,
-  ledHeightOffset: 0.06,
-  ledLightDistance: 3.0,
-  animationSpeed: 0.02,
-};
 
 const createACBody = () => {
   const { width, height, depth } = AC_CONFIG;

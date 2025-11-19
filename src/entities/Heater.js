@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { snapToGrid, isOnFloor } from "../utils/entityUtils";
 import { HOUSE_CONFIG } from "../config/sceneConfig";
+import { HEATER_CONFIG } from "../config/entityConfig";
 import { EntityBase } from "./EntityBase";
 import { validateCandidate, buildOthers } from "../utils/entityCollision";
 
@@ -11,10 +12,6 @@ import { validateCandidate, buildOthers } from "../utils/entityCollision";
  * - diseño realista con rejillas, panel frontal y LED superior
  * - LED: indicador en la parte superior (rojo=apagado, azul=encendido)
  */
-const width = 1;
-const depth = 1;
-const height = 1.5;
-
 class HeaterEntity extends EntityBase {
   constructor({ position, id } = {}) {
     super({ type: "heater", id, position });
@@ -28,9 +25,13 @@ class HeaterEntity extends EntityBase {
       metalness: 0.2,
     });
 
-    const bodyGeom = new THREE.BoxGeometry(width, height, depth);
+    const bodyGeom = new THREE.BoxGeometry(
+      HEATER_CONFIG.width,
+      HEATER_CONFIG.height,
+      HEATER_CONFIG.depth
+    );
     const body = new THREE.Mesh(bodyGeom, bodyMat);
-    body.position.y = height / 2;
+    body.position.y = HEATER_CONFIG.height / 2;
     body.castShadow = false;
     body.receiveShadow = true;
     this.add(body);
@@ -42,9 +43,17 @@ class HeaterEntity extends EntityBase {
       metalness: 0.5,
     });
 
-    const panelGeom = new THREE.BoxGeometry(width - 0.1, height - 0.2, 0.02);
+    const panelGeom = new THREE.BoxGeometry(
+      HEATER_CONFIG.width - 0.1,
+      HEATER_CONFIG.height - 0.2,
+      0.02
+    );
     const panel = new THREE.Mesh(panelGeom, panelMat);
-    panel.position.set(0, height / 2, depth / 2 + 0.01);
+    panel.position.set(
+      0,
+      HEATER_CONFIG.height / 2,
+      HEATER_CONFIG.depth / 2 + 0.01
+    );
     panel.castShadow = false;
     panel.receiveShadow = true;
     this.add(panel);
@@ -58,12 +67,20 @@ class HeaterEntity extends EntityBase {
 
     const grillCount = 8;
     const grillHeight = 0.03;
-    const grillSpacing = (height - 0.4) / grillCount;
+    const grillSpacing = (HEATER_CONFIG.height - 0.4) / grillCount;
 
     for (let i = 0; i < grillCount; i++) {
-      const grillGeom = new THREE.BoxGeometry(width - 0.15, grillHeight, 0.01);
+      const grillGeom = new THREE.BoxGeometry(
+        HEATER_CONFIG.width - 0.15,
+        grillHeight,
+        0.01
+      );
       const grill = new THREE.Mesh(grillGeom, grillMat);
-      grill.position.set(0, 0.3 + i * grillSpacing, depth / 2 + 0.02);
+      grill.position.set(
+        0,
+        0.3 + i * grillSpacing,
+        HEATER_CONFIG.depth / 2 + 0.02
+      );
       grill.castShadow = false;
       this.add(grill);
     }
@@ -75,7 +92,11 @@ class HeaterEntity extends EntityBase {
       metalness: 0.1,
     });
 
-    const footGeom = new THREE.BoxGeometry(width - 0.1, 0.05, depth - 0.1);
+    const footGeom = new THREE.BoxGeometry(
+      HEATER_CONFIG.width - 0.1,
+      0.05,
+      HEATER_CONFIG.depth - 0.1
+    );
     const foot = new THREE.Mesh(footGeom, footMat);
     foot.position.y = 0.025;
     foot.castShadow = false;
@@ -89,9 +110,13 @@ class HeaterEntity extends EntityBase {
       metalness: 0.3,
     });
 
-    const topGeom = new THREE.BoxGeometry(width, 0.08, depth);
+    const topGeom = new THREE.BoxGeometry(
+      HEATER_CONFIG.width,
+      0.08,
+      HEATER_CONFIG.depth
+    );
     const top = new THREE.Mesh(topGeom, topMat);
-    top.position.y = height + 0.04;
+    top.position.y = HEATER_CONFIG.height + 0.04;
     top.castShadow = false;
     top.receiveShadow = true;
     this.add(top);
@@ -106,14 +131,14 @@ class HeaterEntity extends EntityBase {
       metalness: 0.1,
     });
     const led = new THREE.Mesh(ledGeom, ledMat);
-    led.position.set(0, height + 0.08, 0);
+    led.position.set(0, HEATER_CONFIG.height + 0.08, 0);
     led.castShadow = false;
     led.receiveShadow = false;
     this.add(led);
 
     // ===== LUZ DEL LED (PointLight) =====
     const ledLight = new THREE.PointLight(0xff0000, 0.5, 2.0);
-    ledLight.position.set(0, height + 0.12, 0);
+    ledLight.position.set(0, HEATER_CONFIG.height + 0.12, 0);
     ledLight.castShadow = false;
     this.add(ledLight);
 
