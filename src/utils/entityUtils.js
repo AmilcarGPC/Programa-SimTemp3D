@@ -1,4 +1,5 @@
-import { WINDOW_CONFIG, HOUSE_CONFIG } from "../config/sceneConfig";
+import { WINDOW_CONFIG } from "../config/entityConfig";
+import { HOUSE_CONFIG } from "../config/sceneConfig";
 
 export const DOOR_DIRECTIONS = {
   NORTH: "north",

@@ -1,6 +1,5 @@
-import { DOOR_CONFIG, WINDOW_CONFIG } from "../config/sceneConfig";
+import { DOOR_CONFIG, WINDOW_CONFIG, AC_CONFIG } from "../config/entityConfig";
 import { HOUSE_CONFIG } from "../config/sceneConfig";
-import { AC_CONFIG } from "./createAirConditioner";
 
 // Normaliza la información mínima necesaria para chequear solapamientos
 const getMeta = (ent) => {

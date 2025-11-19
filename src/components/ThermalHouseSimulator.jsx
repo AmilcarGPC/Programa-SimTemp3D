@@ -11,36 +11,34 @@ import { useWindowResize } from "../hooks/useWindowResize";
 import { useAnimationLoop } from "../hooks/useAnimationLoop";
 import { useThermalEffects } from "../hooks/useThermalEffects";
 import useEntities from "../hooks/useEntities";
-import { createHeater } from "../utils/createHeater";
-import { createAirConditioner } from "../utils/createAirConditioner";
 import { createGround } from "../utils/createGround";
 import { createTrees } from "../utils/createTree";
 import { createHouse } from "../utils/createHouse";
+
+// Entities
 import {
-  createDoor,
+  Door,
   applyDoorCutouts,
   updateDoorAnimation,
   toggleDoor,
-} from "../utils/createDoor";
+} from "../entities/Door";
 import {
-  createWindow,
+  Window,
   applyWindowCutouts,
   updateWindowAnimation,
   toggleWindow,
-} from "../utils/createWindow";
+} from "../entities/Window";
+import { Heater } from "../entities/Heater";
+import { AirConditioner } from "../entities/AirConditioner";
+
 import {
   updateDoorPosition,
   snapToGrid,
   updateWindowPosition,
 } from "../utils/entityUtils";
 import { disposeObject } from "../utils/disposeUtils";
-import {
-  WINDOW_CONFIG,
-  DOOR_CONFIG,
-  TREE_POSITIONS,
-  UI_CONFIG,
-  HOUSE_CONFIG,
-} from "../config/sceneConfig";
+import { WINDOW_CONFIG, DOOR_CONFIG } from "../config/entityConfig";
+import { TREE_POSITIONS, UI_CONFIG, HOUSE_CONFIG } from "../config/sceneConfig";
 import { validateCandidate } from "../utils/entityCollision";
 // `isOnWall` and positioning helpers imported above from entityUtils
 import { Brush, Evaluator, SUBTRACTION } from "three-bvh-csg";
@@ -85,7 +83,7 @@ const ThermalHouseSimulator = () => {
   } = useEntities(scene, {
     type: "door",
     createEntity: ({ position, direction, id } = {}) =>
-      createDoor({ position, direction, id }),
+      Door({ position, direction, id }),
   });
 
   // Windows
@@ -102,7 +100,7 @@ const ThermalHouseSimulator = () => {
   } = useEntities(scene, {
     type: "window",
     createEntity: ({ position, direction, id } = {}) =>
-      createWindow({ position, direction, id }),
+      Window({ position, direction, id }),
   });
 
   // Hook para gestionar calefactores (usando useEntities genérico)
@@ -116,7 +114,7 @@ const ThermalHouseSimulator = () => {
     clearAllItems: clearAllHeaters,
   } = useEntities(scene, {
     type: "heater",
-    createEntity: ({ position, id } = {}) => createHeater({ position, id }),
+    createEntity: ({ position, id } = {}) => Heater({ position, id }),
   });
 
   // Hook para gestionar aires acondicionados (wall-mounted)
@@ -132,7 +130,7 @@ const ThermalHouseSimulator = () => {
   } = useEntities(scene, {
     type: "aircon",
     createEntity: ({ position, direction, id } = {}) =>
-      createAirConditioner({ position, direction, id }),
+      AirConditioner({ position, direction, id }),
   });
 
   // Inicializar la escena con objetos 3D
@@ -624,9 +622,9 @@ const ThermalHouseSimulator = () => {
         // Si no se movió, es un clic -> toggle (puerta, ventana o calefactor)
         if (distance < 5) {
           if (draggedDoor.userData.type === "door") {
-            toggleDoor(draggedDoor, true);
+            toggleDoorState(draggedDoor.userData.id);
           } else if (draggedDoor.userData.type === "window") {
-            toggleWindow(draggedDoor, true);
+            toggleWindowState(draggedDoor.userData.id);
           } else if (draggedDoor.userData.type === "heater") {
             toggleHeaterState(draggedDoor.userData.id);
           } else if (draggedDoor.userData.type === "aircon") {

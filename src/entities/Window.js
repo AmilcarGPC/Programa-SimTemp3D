@@ -1,20 +1,21 @@
 import * as THREE from "three";
 import { SUBTRACTION, Brush, Evaluator } from "three-bvh-csg";
-import { HOUSE_CONFIG, WINDOW_CONFIG } from "../config/sceneConfig";
+import { HOUSE_CONFIG } from "../config/sceneConfig";
+import { WINDOW_CONFIG } from "../config/entityConfig";
 import {
   WINDOW_DIRECTIONS,
   isOnWall,
   getWindowRotation,
   snapToGrid,
   updateWindowPosition,
-} from "./entityUtils";
+} from "../utils/entityUtils";
 import { EntityBase } from "./EntityBase";
-import { validateCandidate, buildOthers } from "./entityCollision";
+import { validateCandidate, buildOthers } from "../utils/entityCollision";
 
 /**
  * Crea el marco de la ventana
  */
-const createWindowFrame = () => {
+const WindowFrame = () => {
   const { width, height, depth, frameThickness } = WINDOW_CONFIG;
 
   const frameGroup = new THREE.Group();
@@ -50,7 +51,7 @@ const createWindowFrame = () => {
 /**
  * Crea la rejilla (muntins) para dividir el vidrio en panesColumns x panesRows
  */
-const createWindowGrid = () => {
+const WindowGrid = () => {
   const {
     width,
     height,
@@ -103,7 +104,7 @@ const createWindowGrid = () => {
 /**
  * Crea el cristal/hoja de la ventana
  */
-const createWindowGlass = () => {
+const WindowGlass = () => {
   const { width, height, glassThickness } = WINDOW_CONFIG;
 
   const glassMat = new THREE.MeshPhysicalMaterial({
@@ -123,7 +124,7 @@ const createWindowGlass = () => {
   return glass;
 };
 
-const createWindowCutout = () => {
+const WindowCutout = () => {
   const { width, height, depth } = WINDOW_CONFIG;
   const geom = new THREE.BoxGeometry(
     width,
@@ -149,8 +150,8 @@ class WindowEntity extends EntityBase {
     this.userData.currentAngle = 0;
 
     const { width, height, frameThickness, glassThickness } = WINDOW_CONFIG;
-    const frame = createWindowFrame();
-    const grid = createWindowGrid();
+    const frame = WindowFrame();
+    const grid = WindowGrid();
 
     const shutterGroup = new THREE.Group();
     const innerWidth = width * 0.9;
@@ -217,17 +218,17 @@ class WindowEntity extends EntityBase {
         : this.userData.shutterClosedY;
       this.userData.shutterTargetY = targetY;
       this.userData.lightTarget = isOpen ? 2.5 : 0.0;
-      if (instant && this.userData.shutterGroup) {
-        this.userData.shutterCurrentY = targetY;
+      // Apply instantly: update shutter position and light immediately
+      this.userData.shutterCurrentY = targetY;
+      if (this.userData.shutterGroup)
         this.userData.shutterGroup.children.forEach((c) => {
           c.position.y = targetY;
         });
-        if (this.userData.pointLight) {
-          this.userData.lightCurrent = this.userData.lightTarget;
-          this.userData.pointLight.intensity = this.userData.lightTarget;
-          this.userData.pointLight.visible =
-            this.userData.pointLight.intensity > 0.001;
-        }
+      if (this.userData.pointLight) {
+        this.userData.lightCurrent = this.userData.lightTarget;
+        this.userData.pointLight.intensity = this.userData.lightTarget;
+        this.userData.pointLight.visible =
+          this.userData.pointLight.intensity > 0.001;
       }
     };
 
@@ -308,7 +309,7 @@ class WindowEntity extends EntityBase {
   }
 }
 
-export const createWindow = ({ position, direction, id } = {}) => {
+export const Window = ({ position, direction, id } = {}) => {
   console.log("CW", position, direction);
   if (!isOnWall({ ...position, direction })) {
     console.warn("Invalid window position:", position, direction);
@@ -317,13 +318,13 @@ export const createWindow = ({ position, direction, id } = {}) => {
   return new WindowEntity({ position, direction, id });
 };
 
-// WindowEntity and factory created earlier; createWindow factory returns WindowEntity instance
+// WindowEntity and factory created earlier; Window factory returns WindowEntity instance
 export const applyWindowCutouts = (wallsMesh, windowPositions) => {
   if (!windowPositions || windowPositions.length === 0) return wallsMesh;
   const evaluator = new Evaluator();
   let result = wallsMesh;
   windowPositions.forEach((win) => {
-    const cutout = createWindowCutout();
+    const cutout = WindowCutout();
     const halfDepth = WINDOW_CONFIG.depth / 2;
     let cx = win.position.x;
     let cz = win.position.z;

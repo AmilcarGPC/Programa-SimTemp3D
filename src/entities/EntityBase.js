@@ -1,6 +1,6 @@
 import * as THREE from "three";
-import { disposeObject } from "./disposeUtils";
-import { snapToGrid } from "./entityUtils";
+import { disposeObject } from "../utils/disposeUtils";
+import { snapToGrid } from "../utils/entityUtils";
 
 /**
  * EntityBase

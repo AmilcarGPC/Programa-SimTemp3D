@@ -64,7 +64,7 @@ Raíz (principales archivos):
 	 │  ├─ createGround.js
 	 │  ├─ createHouse.js
 	 │  ├─ createTree.js
-	 │  ├─ createDoor.js        # 🚪 Geometría y lógica de puertas
+	 │  ├─ Door.js        # 🚪 Geometría y lógica de puertas
 	 │  ├─ doorExamples.js      # 📚 Ejemplos de uso de puertas
 	 │  └─ disposeUtils.js
 	 ├─ integration/        # APIs simplificadas

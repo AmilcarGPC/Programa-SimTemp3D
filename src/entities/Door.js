@@ -1,15 +1,16 @@
 import * as THREE from "three";
 import { SUBTRACTION, Brush, Evaluator } from "three-bvh-csg";
-import { HOUSE_CONFIG, DOOR_CONFIG } from "../config/sceneConfig";
-import { createWallMaterial } from "./createHouse";
+import { HOUSE_CONFIG } from "../config/sceneConfig";
+import { DOOR_CONFIG } from "../config/entityConfig";
+import { createWallMaterial } from "../utils/createHouse";
 import { EntityBase } from "./EntityBase";
-import { validateCandidate, buildOthers } from "./entityCollision";
+import { validateCandidate, buildOthers } from "../utils/entityCollision";
 import {
   DOOR_DIRECTIONS,
   isOnWall,
   getDoorRotation,
   updateDoorPosition,
-} from "./entityUtils";
+} from "../utils/entityUtils";
 
 // DOOR_CONFIG ahora se exporta desde `src/config/sceneConfig.js`
 
@@ -22,7 +23,7 @@ import {
  * Crea el marco de la puerta (low poly).
  * El marco ahora consiste en 3 extrusiones que sobresalen del muro.
  */
-const createDoorFrame = () => {
+const DoorFrame = () => {
   const frameGroup = new THREE.Group();
   const { width, height, depth, frameThickness } = DOOR_CONFIG;
   const protrusion = 0.02; // Cuánto sobresale el marco del muro
@@ -70,7 +71,7 @@ const createDoorFrame = () => {
 /**
  * Crea la tabla de la puerta (low poly)
  */
-const createDoorPanel = () => {
+const DoorPanel = () => {
   const { width, height, doorThickness, frameThickness } = DOOR_CONFIG;
 
   // Dimensiones internas (dentro del marco)
@@ -97,7 +98,7 @@ const createDoorPanel = () => {
 /**
  * Crea la manija de la puerta (low poly)
  */
-const createDoorHandle = () => {
+const DoorHandle = () => {
   const { handleSize, doorThickness } = DOOR_CONFIG;
 
   const handleMaterial = new THREE.MeshStandardMaterial({
@@ -129,7 +130,7 @@ const createDoorHandle = () => {
 /**
  * Crea la geometría CSG para hacer el hueco en la pared
  */
-const createDoorCutout = () => {
+const DoorCutout = () => {
   const { width, height, depth } = DOOR_CONFIG;
 
   // Crear geometría para el corte con profundidad suficiente
@@ -170,9 +171,9 @@ class DoorEntity extends EntityBase {
     this.userData.currentAngle = 0;
 
     // Crear componentes
-    const frame = createDoorFrame();
-    const panel = createDoorPanel();
-    const handle = createDoorHandle();
+    const frame = DoorFrame();
+    const panel = DoorPanel();
+    const handle = DoorHandle();
 
     const pivotGroup = new THREE.Group();
     const { width, frameThickness } = DOOR_CONFIG;
@@ -215,11 +216,11 @@ class DoorEntity extends EntityBase {
     // Animación/Toggle handlers (based on canonical `isActive`)
     this.onToggle = (instant = false) => {
       const isOpen = !!this.userData.isActive;
-      this.userData.targetAngle = isOpen ? DOOR_CONFIG.openAngle : 0;
-      if (instant && this.userData.pivotGroup) {
-        this.userData.currentAngle = this.userData.targetAngle;
-        this.userData.pivotGroup.rotation.y = this.userData.targetAngle;
-      }
+      const target = isOpen ? DOOR_CONFIG.openAngle : 0;
+      this.userData.targetAngle = target;
+      // Apply instantly: set current angle and rotation immediately
+      this.userData.currentAngle = target;
+      if (this.userData.pivotGroup) this.userData.pivotGroup.rotation.y = target;
     };
 
     this.updateAnimation = () => {
@@ -297,7 +298,7 @@ class DoorEntity extends EntityBase {
   }
 }
 
-export const createDoor = (options) => {
+export const Door = (options) => {
   const d = new DoorEntity(options);
   if (d._invalid) return null;
   return d;
@@ -318,9 +319,9 @@ export const applyDoorCutouts = (wallsMesh, doorPositions) => {
   let resultMesh = wallsMesh;
 
   doorPositions.forEach((doorPos, index) => {
-    const cutout = createDoorCutout();
+    const cutout = DoorCutout();
 
-    // Posicionar el cutout (mantener la Y que ya tiene de createDoorCutout)
+    // Posicionar el cutout (mantener la Y que ya tiene de DoorCutout)
     // Ajustar la posición del cutout para coincidir con la posición real de la puerta
     const halfDepth = DOOR_CONFIG.depth / 2;
     let cutX = doorPos.position.x;

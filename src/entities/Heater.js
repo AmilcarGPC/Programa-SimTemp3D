@@ -1,8 +1,8 @@
 import * as THREE from "three";
-import { snapToGrid, isOnFloor } from "./entityUtils";
+import { snapToGrid, isOnFloor } from "../utils/entityUtils";
 import { HOUSE_CONFIG } from "../config/sceneConfig";
 import { EntityBase } from "./EntityBase";
-import { validateCandidate, buildOthers } from "./entityCollision";
+import { validateCandidate, buildOthers } from "../utils/entityCollision";
 
 /**
  * Crea un calefactor profesional como un Group de Three.js
@@ -207,7 +207,7 @@ class HeaterEntity extends EntityBase {
   }
 }
 
-export const createHeater = ({ position, id }) => {
+export const Heater = ({ position, id }) => {
   console.log("CH", position, id);
   return new HeaterEntity({ position, id });
 };

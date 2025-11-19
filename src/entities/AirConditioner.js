@@ -6,8 +6,8 @@ import {
   isOnWall,
   getWindowRotation,
   updateWindowPosition,
-} from "./entityUtils";
-import { validateCandidate, buildOthers } from "./entityCollision";
+} from "../utils/entityUtils";
+import { validateCandidate, buildOthers } from "../utils/entityCollision";
 
 // Tamaño solicitado: 2.5 x 0.75 x 0.75 (ancho x alto x profundidad)
 export const AC_CONFIG = {
@@ -263,7 +263,7 @@ class AirConditionerEntity extends EntityBase {
   }
 }
 
-export const createAirConditioner = ({ position, direction, id } = {}) => {
+export const AirConditioner = ({ position, direction, id } = {}) => {
   // AC must fit within wall height
   if (AC_CONFIG.height > HOUSE_CONFIG.wallHeight) {
     console.warn("AC height exceeds wall height, cannot create unit");
