@@ -6,8 +6,8 @@ Este README describe la estructura actual del proyecto, objetivos de cada módul
 
 ## Resumen rápido
 
-- Propósito: visualización interactiva de una casa en 3D con efectos térmicos para explorar cómo cambian colores/ambiente con la temperatura.
-- Stack: `React` + `Vite`, `three` (Three.js) con utilidades `@react-three/fiber` + `@react-three/drei` y `postprocessing` / `n8ao` para efectos.
+- **Propósito**: visualización interactiva de una casa en 3D con efectos térmicos para explorar cómo cambian colores/ambiente con la temperatura.
+- **Stack**: `React` + `Vite`, `three` (Three.js) con utilidades `@react-three/fiber` + `@react-three/drei` y `postprocessing` / `n8ao` para efectos.
 
 ## Comandos principales
 
@@ -39,37 +39,39 @@ Raíz (principales archivos):
 ├─ vite.config.js
 ├─ index.html
 ├─ README.md
-├─ DOOR_README.md         # 🚪 Guía rápida del sistema de puertas
-├─ DOOR_SYSTEM.md         # 📖 Documentación completa de puertas
 └─ src/
 	 ├─ main.jsx            # Entrada React
 	 ├─ App.jsx             # Componente raíz
-	 ├─ assets/             # Recursos estáticos (logos, imágenes)
+	 ├─ assets/             # Recursos estáticos
 	 ├─ components/         # Componentes React (UI + contenedor canvas)
 	 │  ├─ Canvas3D.jsx
 	 │  ├─ ControlPanel.jsx
 	 │  ├─ MetricsBar.jsx
+	 │  ├─ ContextMenu.jsx      # 🖱️ Menú contextual (clic derecho)
 	 │  ├─ DoorControl.jsx      # 🚪 Control de puertas
-	 │  ├─ DoorControl.css      # 🎨 Estilos del control
-	 │  └─ ThermalHouseSimulator.jsx
-	 ├─ hooks/              # Hooks personalizados para Three.js y lógica
+	 │  ├─ WindowControl.jsx    # 🪟 Control de ventanas
+	 │  └─ ThermalHouseSimulator.jsx # Orquestador principal
+	 ├─ entities/           # 📦 Definición de Entidades (Lógica + Geometría)
+	 │  ├─ EntityBase.js        # Clase base para entidades
+	 │  ├─ Door.js              # 🚪 Puerta
+	 │  ├─ Window.js            # 🪟 Ventana
+	 │  ├─ Heater.js            # 🔥 Calefactor
+	 │  └─ AirConditioner.js    # ❄️ Aire Acondicionado
+	 ├─ hooks/              # Hooks personalizados
 	 │  ├─ useThreeScene.js
 	 │  ├─ useLighting.js
 	 │  ├─ usePostProcessing.js
 	 │  ├─ useAnimationLoop.js
 	 │  ├─ useWindowResize.js
 	 │  ├─ useThermalEffects.js
-	 │  └─ useDoors.js          # 🚪 Hook de gestión de puertas
+	 │  └─ useEntities.js       # 🧩 Hook genérico de gestión de entidades
 	 ├─ utils/              # Helpers y creadores de geometría/recursos
 	 │  ├─ createGround.js
 	 │  ├─ createHouse.js
 	 │  ├─ createTree.js
-	 │  ├─ Door.js        # 🚪 Geometría y lógica de puertas
-	 │  ├─ doorExamples.js      # 📚 Ejemplos de uso de puertas
+	 │  ├─ entityCollision.js   # Lógica de colisiones y validación
 	 │  └─ disposeUtils.js
-	 ├─ integration/        # APIs simplificadas
-	 │  └─ doorIntegration.js   # 🔧 DoorManager (API simplificada)
-	 └─ config/             # Configuración centralizada de la escena
+	 └─ config/             # Configuración centralizada
 			└─ sceneConfig.js
 ```
 
@@ -79,100 +81,79 @@ Raíz (principales archivos):
 ThermalHouseSimulator
 ├─ Canvas3D (div para WebGL renderer)
 ├─ ControlPanel (UI: sliders, botones)
-└─ MetricsBar (FPS, contador)
+├─ MetricsBar (FPS, contador)
+└─ ContextMenu (Menú flotante para añadir/editar)
 
 Internals (hooks)
 ├─ useThreeScene -> crea `scene`, `camera`, `renderer`
+├─ useEntities -> gestiona estado (CRUD) de Puertas, Ventanas, etc.
 ├─ useLighting -> agrega luces a `scene`
 ├─ usePostProcessing -> configura `EffectComposer` y passes
-├─ useAnimationLoop -> loop de render y cálculo de FPS
 └─ useThermalEffects -> adapta `scene.background` y materiales según temperatura
 ```
 
 ## Objetivos de cada carpeta / archivo clave
 
 - `src/components/`:
+  - `ThermalHouseSimulator.jsx`: componente de orquestación; monta la escena 3D, gestiona estado de temperaturas, el sistema de entidades (`useEntities`) y la interacción del mouse (raycasting).
+  - `ContextMenu.jsx`: menú emergente al hacer clic derecho en muros o suelo para añadir componentes.
+  - `ControlPanel.jsx`: controles UI laterales.
 
-  - `ThermalHouseSimulator.jsx`: componente de orquestación; monta la escena 3D, gestiona estado de temperaturas y compone `Canvas3D`, `ControlPanel` y `MetricsBar`.
-  - `Canvas3D.jsx`: contenedor DOM donde `useThreeScene` añade el `renderer.domElement`.
-  - `ControlPanel.jsx`: controles UI (deslizadores para temperatura, botones de acción).
-  - `MetricsBar.jsx`: muestra FPS y otros indicadores.
+- `src/entities/`:
+  - Contiene la lógica específica de cada objeto interactivo (geometría, validación de posición, animaciones).
+  - `Door.js` / `Window.js`: incluyen lógica CSG para cortar paredes.
 
 - `src/hooks/`:
-
-  - `useThreeScene.js`: inicializa `THREE.Scene`, cámara y `WebGLRenderer`. Mantiene instancias y adjunta el canvas al DOM.
-  - `useLighting.js`: agrega las luces (hemisférica, direccional, ambient, fill). Importante: limpia correctamente targets y objetos.
-  - `usePostProcessing.js`: configura `EffectComposer` con passes (N8AO, SMAA, etc.).
-  - `useAnimationLoop.js`: requestAnimationFrame loop y cálculo de FPS.
-  - `useWindowResize.js`: actualiza cámara/renderer/composer en resize.
-  - `useThermalEffects.js`: aplica ajustes visuales según `tempExterna` y `tempInterna`.
+  - `useEntities.js`: Hook centralizado que maneja la lista de objetos, su adición/eliminación y movimiento. Reemplaza a los antiguos hooks específicos.
+  - `useThreeScene.js`: inicializa `THREE.Scene`, cámara y `WebGLRenderer`.
 
 - `src/utils/`:
+  - `createHouse.js`: genera paredes y aplica los cortes CSG dinámicamente.
+  - `entityCollision.js`: validaciones para evitar superposición de objetos.
 
-  - `createGround.js`: crea el `Mesh` del suelo y textura procedural (ahora cacheada para evitar recomputo en caliente).
-  - `createHouse.js`: genera paredes (usa CSG) y marcadores; material de pared parametrizado por `HOUSE_CONFIG`.
-  - `createTree.js`: fabrica árboles decorativos; ahora reutiliza geometrías/materiales compartidos para eficiencia.
-  - `disposeUtils.js`: helper seguro para disponer geometrías, materiales y texturas (uso en cleanups).
+## 🧩 Sistema de Entidades Interactivas
 
-- `src/config/sceneConfig.js`: parámetros globales (colores, tamaños, posiciones de árboles, UI_CONFIG). Mantener aquí los valores facilita ajustes globales.
+El proyecto cuenta con un sistema flexible para colocar objetos en la casa:
 
-## 🚪 Sistema de Puertas (Nuevo)
+- **Tipos soportados**:
+  - 🚪 **Puertas**: Cortan el muro, se pueden abrir/cerrar.
+  - 🪟 **Ventanas**: Cortan el muro, tienen animación de apertura.
+  - 🔥 **Calefactores**: Se colocan en el suelo, tienen efecto de calor visual.
+  - ❄️ **Aires Acondicionados**: Se montan en la pared (unidad exterior).
 
-Se ha implementado un sistema completo de puertas low poly con las siguientes características:
+- **Interacción**:
+  - **Clic Derecho**: Abre el menú contextual para añadir objetos en la posición del cursor.
+  - **Arrastrar y Soltar**: Puedes mover los objetos una vez colocados manteniendo presionado el clic izquierdo.
+  - **Clic Izquierdo**: Interactúa con el objeto (abrir puerta, encender calefactor).
 
-- **Diseño Low Poly**: Marco, tabla y manija con geometrías simples
-- **4 Direcciones**: Norte, Sur, Este, Oeste
-- **Validación Automática**: Evita esquinas y posiciones inválidas
-- **Animación Suave**: Apertura/cierre con interpolación
-- **Cortes CSG**: Aberturas perfectas en las paredes usando `three-bvh-csg`
-- **Interfaz Gráfica**: Panel de control integrado en `ControlPanel`
-- **Raycasting**: Colocación interactiva con clic del mouse
-
-**Documentación completa**: Ver [DOOR_README.md](./DOOR_README.md) y [DOOR_SYSTEM.md](./DOOR_SYSTEM.md)
-
-**Uso rápido**:
-
-1. Haz clic en "Colocar Puerta" en el panel de control
-2. Selecciona la dirección del muro
-3. Haz clic en una posición válida del muro
-4. Usa "Reconstruir Paredes" para aplicar los cortes
+- **Características Técnicas**:
+  - **CSG (Constructive Solid Geometry)**: Puertas y ventanas realizan cortes booleanos en tiempo real sobre la malla de la pared.
+  - **Validación**: El sistema impide colocar objetos superpuestos o fuera de los límites válidos.
 
 ## Notas de diseño y mantenimiento
 
-- Separación de responsabilidades: la mayor parte de la lógica Three.js está aislada en `hooks/` y `utils/`, mientras que los componentes React manejan layout y estado de UI.
-- Recursos compartidos: `createTree` y `createGround` usan cache/recursos compartidos para reducir memoria y pausas por GC.
-- Limpieza robusta: se añadió `disposeUtils.js` y las limpiezas comprueban nulidad, evitando errores al desmontar.
-- Rendimiento: operaciones costosas como CSG o generación de texturas pueden bloquear el hilo principal; si experimentas jank, considera precomputar activos o mover operaciones a un WebWorker.
-- Sistema de puertas: Usa CSG para cortes en paredes (operación costosa). Reconstruye paredes solo cuando sea necesario.
+- **Separación de responsabilidades**: La lógica de Three.js está en `hooks/` y `entities/`. React solo orquesta y muestra UI.
+- **Rendimiento**: Las operaciones CSG (`three-bvh-csg`) son costosas. Se ejecutan solo al finalizar el arrastre de una puerta/ventana para evitar congelamientos durante el movimiento.
+- **Limpieza**: Se usa `disposeUtils.js` para asegurar que geometrías y materiales se liberen de la memoria GPU al eliminar objetos.
 
 ## Cómo contribuir / probar cambios
 
-1. Instalar dependencias (usar la flag indicada):
-
+1. Instalar dependencias:
 ```powershell
 npm install --legacy-peer-deps
 ```
 
-2. Levantar servidor dev y abrir http://localhost:5173 (o puerto que muestre Vite):
-
+2. Levantar servidor dev:
 ```powershell
 npm run dev
 ```
 
-3. HMR está activo; al modificar hooks o utilitarios asegúrate de probar mount/unmount (desmontado limpio) para detectar leaks.
+## Problemas conocidos
 
-## Problemas conocidos y recomendaciones rápidas
-
-- Si ves jank en carga: la generación de la malla mediante CSG (`three-bvh-csg`) puede ser costosa. Recomendación: pre-generar la malla o usar WebWorker.
-- Para ajustar visuales térmicos: editar `src/hooks/useThermalEffects.js` y `src/config/sceneConfig.js` (valores de color/thresholds).
-- Si cambias `UI_CONFIG.sidePanel.width` o `footer.height`, el layout usa variables CSS y se ajustará automáticamente desde `ThermalHouseSimulator.jsx`.
+- **Jank en CSG**: Al soltar una puerta/ventana, puede haber un leve parpadeo o pausa mientras se recalcula la geometría de la pared.
+- **Sombras**: La configuración actual de sombras está optimizada para rendimiento, puede haber artefactos menores en ángulos rasantes.
 
 ---
-
-Si quieres, puedo:
-
-- Generar un diagrama mermaid más visual en el README.
-- Añadir sección de ejemplos para modificar efectos térmicos.
 
 # React + Vite
 
@@ -182,11 +163,3 @@ Currently, two official plugins are available:
 
 - [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
 - [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.

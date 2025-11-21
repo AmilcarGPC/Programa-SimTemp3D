@@ -182,7 +182,7 @@ class DoorEntity extends EntityBase {
     // Reasignar geometría para ajustar al ancho interior
     try {
       if (panel.geometry) panel.geometry.dispose();
-    } catch (e) {}
+    } catch (e) { }
     panel.geometry = new THREE.BoxGeometry(
       panelWidth,
       panel.geometry.parameters.height,

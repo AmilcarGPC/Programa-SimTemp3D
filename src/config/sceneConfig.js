@@ -149,7 +149,7 @@ export const UI_CONFIG = {
     backgroundColor: "rgba(33, 33, 33, 0.95)",
   },
   temperature: {
-    external: { min: -20, max: 40, default: 10 },
-    internal: { min: 0, max: 35, default: 20 },
+    external: { min: -10, max: 45, default: 45 },
+    internal: { min: -10, max: 45, default: -10 },
   },
 };

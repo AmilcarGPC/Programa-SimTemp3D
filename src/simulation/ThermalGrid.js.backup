@@ -1,0 +1,726 @@
+import * as THREE from "three";
+import { HOUSE_CONFIG } from "../config/sceneConfig";
+import { DOOR_CONFIG, WINDOW_CONFIG, AC_CONFIG, HEATER_CONFIG } from "../config/entityConfig";
+
+export class Particle {
+  constructor(x, z, temp) {
+    this.x = x;
+    this.z = z;
+    this.temp = temp;
+    this.color = new THREE.Color();
+    this.updateColor();
+  }
+
+  updateColor() {
+    // Range: -10 (Blue) to 45 (Dark Red)
+    const minTemp = -10;
+    const maxTemp = 45;
+
+    // Clamp temperature
+    const t = Math.max(minTemp, Math.min(maxTemp, this.temp));
+
+    // Normalize 0 to 1
+    const alpha = (t - minTemp) / (maxTemp - minTemp);
+
+    // Interpolate
+    // Cold (-10): Blue (0, 0, 1)
+    // Hot (45): Dark Red (0.5, 0, 0) or just Red (1, 0, 0)?
+    // User said "Rojo muy oscuro" (Dark Red) for 45.
+    // Let's try a spectrum: Blue -> Cyan -> Green -> Yellow -> Red -> Dark Red?
+    // Or just a simple lerp as requested "degradado de rojo oscuro ... y azul bajo".
+
+    // Let's use HSL for a nice thermal gradient
+    // Blue (0.66) -> Red (0.0)
+    // 0.66 * (1 - alpha)
+
+    this.color.setHSL(0.66 * (1.0 - alpha), 1.0, 0.5);
+  }
+}
+
+export class ThermalGrid {
+  /**
+   * @param {number} minX - Start X coordinate
+   * @param {number} maxX - End X coordinate
+   * @param {number} minZ - Start Z coordinate
+   * @param {number} maxZ - End Z coordinate
+   * @param {number} density - Particles per unit (e.g., 2 means 2 particles per meter, step 0.5)
+   */
+  constructor(minX, maxX, minZ, maxZ, density) {
+    this.minX = minX;
+    this.maxX = maxX;
+    this.minZ = minZ;
+    this.maxZ = maxZ;
+    this.density = density;
+
+    this.particles = [];
+    this.cols = 0;
+    this.rows = 0;
+    this.initialize();
+  }
+
+  initialize() {
+    const step = 1 / this.density;
+
+    // Calculate cols/rows for indexing
+    this.cols = Math.floor((this.maxX - this.minX) / step) + 1;
+    this.rows = Math.floor((this.maxZ - this.minZ) / step) + 1;
+
+    // House bounds for initial temp logic
+    const houseHalfSize = HOUSE_CONFIG.size / 2;
+    const wallThickness = HOUSE_CONFIG.wallThickness;
+    // User request: Internal area extends outwards (5.3m)
+    const innerHalf = houseHalfSize + wallThickness;
+
+    for (let z = this.minZ; z <= this.maxZ; z += step) {
+      for (let x = this.minX; x <= this.maxX; x += step) {
+
+        // Determine initial temperature based on position
+        // Inside house (inner bounds) -> -10
+        // Outside (including walls) -> 45
+
+        let temp = 45; // Default External
+
+        if (x > -innerHalf && x < innerHalf && z > -innerHalf && z < innerHalf) {
+          temp = -10; // Internal
+        }
+
+        const particle = new Particle(x, z, temp);
+        this.particles.push(particle);
+      }
+    }
+  }
+
+  getSimulationPayload(doors, windows, heaters, acs, tempExterna) {
+    const step = 1 / this.density;
+    const houseHalfSize = HOUSE_CONFIG.size / 2;
+    const wallThickness = HOUSE_CONFIG.wallThickness;
+    const innerHalf = houseHalfSize + wallThickness; // 5.3
+
+    // 1. Define Internal Grid Bounds (indices)
+    // Find indices that cover [-5.3, 5.3]
+    // x = minX + i * step
+    // i = (x - minX) / step
+
+    // We want the range of particles strictly INSIDE or ON the boundary of 5.3
+    // Actually, user said "area of Internal Temperature".
+    // Let's take all particles where x, z are within [-5.3, 5.3]
+
+    const startI = Math.ceil((-innerHalf - this.minX) / step);
+    const endI = Math.floor((innerHalf - this.minX) / step);
+
+    const startJ = Math.ceil((-innerHalf - this.minZ) / step);
+    const endJ = Math.floor((innerHalf - this.minZ) / step);
+
+    const width = endI - startI + 1;
+    const height = endJ - startJ + 1;
+
+    if (width <= 0 || height <= 0) return null;
+
+    // 2. Create Payload Matrix (W+2) x (H+2)
+    // Initialize with 0
+    const payload = Array(width + 2).fill().map(() => Array(height + 2).fill(0));
+
+    // 3. Fill Center with current grid temperatures
+    for (let x = 0; x < width; x++) {
+      for (let y = 0; y < height; y++) {
+        const gridI = startI + x;
+        const gridJ = startJ + y;
+        // Grid is stored in 1D array row-major? 
+        // In initialize: outer loop Z, inner loop X. So index = j * cols + i?
+        // Wait, initialize loop order:
+        // for (let z ...) { for (let x ...) { push } }
+        // So index 0 is (minX, minZ), index 1 is (minX+step, minZ)...
+        // NO! Inner loop is X. So it fills a row of X for a fixed Z.
+        // So index = (z_index * cols) + x_index.
+
+        const index = gridJ * this.cols + gridI;
+        if (index >= 0 && index < this.particles.length) {
+          payload[x + 1][y + 1] = this.particles[index].temp;
+        }
+      }
+    }
+
+    // 4. Fill Border with Replica (Neumann)
+    // Top (y=0) -> Copy y=1
+    // Bottom (y=H+1) -> Copy y=H
+    // Left (x=0) -> Copy x=1
+    // Right (x=W+1) -> Copy x=W
+
+    // Fill corners first (though they might be overwritten)
+    payload[0][0] = payload[1][1];
+    payload[width + 1][0] = payload[width][1];
+    payload[0][height + 1] = payload[1][height];
+    payload[width + 1][height + 1] = payload[width][height];
+
+    // Top & Bottom edges
+    for (let x = 1; x <= width; x++) {
+      payload[x][0] = payload[x][1]; // Top
+      payload[x][height + 1] = payload[x][height]; // Bottom
+    }
+
+    // Left & Right edges
+    for (let y = 1; y <= height; y++) {
+      payload[0][y] = payload[1][y]; // Left
+      payload[width + 1][y] = payload[width][y]; // Right
+    }
+
+    // 5. Handle Openings
+    const applyOpening = (entity, entityWidth) => {
+      console.log("=== APPLY OPENING DEBUG ===");
+      console.log("Entity:", entity);
+      console.log("Entity Width:", entityWidth);
+      console.log("Entity.isActive:", entity.isActive);
+
+      if (!entity.isActive) {
+        console.log("Entity is NOT active/open, skipping");
+        return;
+      }
+
+      const pos = entity.position; // {x, z}
+      const dir = entity.userData?.direction || entity.direction; // 'north', 'south', 'east', 'west'
+
+      console.log("Position:", pos);
+      console.log("Direction:", dir);
+
+      // Calculate range in world coords
+      // Entities are centered.
+      // Range: [pos - width/2, pos + width/2]
+      // We need to map this range to indices in the payload border.
+
+      // Determine which border based on direction/position
+      // North (z ~ -5) -> Top Border (y=0)
+      // South (z ~ 5) -> Bottom Border (y=H+1)
+      // East (x ~ 5) -> Right Border (x=W+1)
+      // West (x ~ -5) -> Left Border (x=0)
+
+      let isHorizontal = (dir === 'north' || dir === 'south');
+
+      console.log("Is Horizontal:", isHorizontal);
+
+      // Calculate start/end indices along the wall
+      let rangeStart, rangeEnd;
+
+      if (isHorizontal) {
+        // Along X axis
+        const startX = pos.x - entityWidth / 2;
+        const endX = pos.x + entityWidth / 2;
+
+        console.log("World X range:", startX, "to", endX);
+
+        // Map world X to internal grid index X
+        // index = (worldX - minInternalX) / step
+        // minInternalX = minX + startI * step
+        const minInternalX = this.minX + startI * step;
+
+        console.log("minInternalX:", minInternalX, "step:", step);
+
+        const idxStart = Math.floor((startX - minInternalX) / step);
+        const idxEnd = Math.ceil((endX - minInternalX) / step);
+
+        console.log("Raw indices:", idxStart, "to", idxEnd);
+
+        // Clamp to valid width
+        const validStart = Math.max(0, idxStart);
+        const validEnd = Math.min(width - 1, idxEnd);
+
+        console.log("Valid indices:", validStart, "to", validEnd);
+
+        const yIndex = (dir === 'north') ? 0 : height + 1;
+
+        console.log("Setting border yIndex:", yIndex, "from x:", validStart + 1, "to", validEnd + 1);
+
+        for (let i = validStart; i <= validEnd; i++) {
+          console.log(`Setting payload[${i + 1}][${yIndex}] = ${tempExterna}`);
+          payload[i + 1][yIndex] = tempExterna;
+        }
+
+      } else {
+        // Along Z axis (East/West)
+        const startZ = pos.z - entityWidth / 2;
+        const endZ = pos.z + entityWidth / 2;
+
+        console.log("World Z range:", startZ, "to", endZ);
+
+        const minInternalZ = this.minZ + startJ * step;
+
+        console.log("minInternalZ:", minInternalZ, "step:", step);
+
+        const idxStart = Math.floor((startZ - minInternalZ) / step);
+        const idxEnd = Math.ceil((endZ - minInternalZ) / step);
+
+        console.log("Raw indices:", idxStart, "to", idxEnd);
+
+        const validStart = Math.max(0, idxStart);
+        const validEnd = Math.min(height - 1, idxEnd);
+
+        console.log("Valid indices:", validStart, "to", validEnd);
+
+        const xIndex = (dir === 'west') ? 0 : width + 1;
+
+        console.log("Setting border xIndex:", xIndex, "from z:", validStart + 1, "to", validEnd + 1);
+
+        for (let j = validStart; j <= validEnd; j++) {
+          console.log(`Setting payload[${xIndex}][${j + 1}] = ${tempExterna}`);
+          payload[xIndex][j + 1] = tempExterna;
+        }
+      }
+    };
+
+    if (doors) {
+      console.log("Processing doors:", doors);
+      doors.forEach(d => applyOpening(d, DOOR_CONFIG.width));
+    }
+    if (windows) {
+      console.log("Processing windows:", windows);
+      windows.forEach(w => applyOpening(w, WINDOW_CONFIG.width));
+    }
+
+    // 6. Handle Heaters and ACs (set fixed temperature to their area)
+    const HEATER_TEMP = 25; // °C
+    const AC_TEMP = 16; // °C
+
+    const applyClimateControl = (entity, temp, entityWidth, entityDepth, typeName) => {
+      if (!entity.isActive) return;
+
+      const pos = entity.position; // {x, z}
+      const dir = entity.userData?.direction || entity.direction; // 'north', 'south', 'east', 'west'
+
+      // Map world position to internal grid indices
+      const minInternalX = this.minX + startI * step;
+      const minInternalZ = this.minZ + startJ * step;
+
+      // Entities can be rotated based on direction
+      // For entities facing north/south: width along X, depth along Z
+      // For entities facing east/west: width along Z, depth along X
+      let widthX, depthZ;
+
+      if (dir === 'north' || dir === 'south') {
+        widthX = entityWidth;
+        depthZ = entityDepth;
+      } else {
+        // Rotated 90 degrees
+        widthX = entityDepth;
+        depthZ = entityWidth;
+      }
+
+      // Calculate world coordinate bounds (entity centered at pos)
+      const startX = pos.x - widthX / 2;
+      const endX = pos.x + widthX / 2;
+      const startZ = pos.z - depthZ / 2;
+      const endZ = pos.z + depthZ / 2;
+
+      console.log(`${typeName} at (${pos.x}, ${pos.z}) dir:${dir}, covering X:[${startX},${endX}] Z:[${startZ},${endZ}]`);
+
+      // Map to payload indices
+      const idxStartX = Math.floor((startX - minInternalX) / step);
+      const idxEndX = Math.ceil((endX - minInternalX) / step);
+      const idxStartZ = Math.floor((startZ - minInternalZ) / step);
+      const idxEndZ = Math.ceil((endZ - minInternalZ) / step);
+
+      // Clamp to valid bounds
+      const validStartX = Math.max(0, idxStartX);
+      const validEndX = Math.min(width - 1, idxEndX);
+      const validStartZ = Math.max(0, idxStartZ);
+      const validEndZ = Math.min(height - 1, idxEndZ);
+
+      console.log(`  Payload indices: X:[${validStartX},${validEndX}] Z:[${validStartZ},${validEndZ}]`);
+
+      // Set temperature for all particles in this area
+      let count = 0;
+      for (let i = validStartX; i <= validEndX; i++) {
+        for (let j = validStartZ; j <= validEndZ; j++) {
+          payload[i + 1][j + 1] = temp;
+          count++;
+        }
+      }
+
+      console.log(`  Set ${count} particles to ${temp}°C`);
+    };
+
+    if (heaters) {
+      console.log("Processing heaters:", heaters);
+      heaters.forEach(h => applyClimateControl(h, HEATER_TEMP, HEATER_CONFIG.width, HEATER_CONFIG.depth, "HEATER"));
+    }
+    if (acs) {
+      console.log("Processing ACs:", acs);
+      acs.forEach(ac => applyClimateControl(ac, AC_TEMP, AC_CONFIG.width, AC_CONFIG.depth, "AC"));
+    }
+
+    // 7. Generate Constraint Mask
+    // 1 = Temperature is FIXED (not affected by finite differences)
+    // 0 = Temperature can be MODIFIED by physics simulation
+    const constraints = Array(width + 2).fill().map(() => Array(height + 2).fill(0));
+
+    // 7a. All borders are ALWAYS fixed (1)
+    // Top and Bottom borders
+    for (let x = 0; x < width + 2; x++) {
+      constraints[x][0] = 1;           // Top border
+      constraints[x][height + 1] = 1;  // Bottom border
+    }
+    // Left and Right borders
+    for (let y = 0; y < height + 2; y++) {
+      constraints[0][y] = 1;           // Left border
+      constraints[width + 1][y] = 1;   // Right border
+    }
+
+    // 7b. Active heaters/ACs have fixed temperatures
+    const markConstraint = (entity, entityWidth, entityDepth, typeName) => {
+      if (!entity.isActive) return; // Inactive = no constraint (0)
+
+      const pos = entity.position;
+      const dir = entity.userData?.direction || entity.direction;
+
+      const minInternalX = this.minX + startI * step;
+      const minInternalZ = this.minZ + startJ * step;
+
+      let widthX, depthZ;
+      if (dir === 'north' || dir === 'south') {
+        widthX = entityWidth;
+        depthZ = entityDepth;
+      } else {
+        widthX = entityDepth;
+        depthZ = entityWidth;
+      }
+
+      const startX = pos.x - widthX / 2;
+      const endX = pos.x + widthX / 2;
+      const startZ = pos.z - depthZ / 2;
+      const endZ = pos.z + depthZ / 2;
+
+      const idxStartX = Math.floor((startX - minInternalX) / step);
+      const idxEndX = Math.ceil((endX - minInternalX) / step);
+      const idxStartZ = Math.floor((startZ - minInternalZ) / step);
+      const idxEndZ = Math.ceil((endZ - minInternalZ) / step);
+
+      const validStartX = Math.max(0, idxStartX);
+      const validEndX = Math.min(width - 1, idxEndX);
+      const validStartZ = Math.max(0, idxStartZ);
+      const validEndZ = Math.min(height - 1, idxEndZ);
+
+      // Mark as constrained (1)
+      let count = 0;
+      for (let i = validStartX; i <= validEndX; i++) {
+        for (let j = validStartZ; j <= validEndZ; j++) {
+          constraints[i + 1][j + 1] = 1;
+          count++;
+        }
+      }
+      console.log(`  ${typeName} marked ${count} particles as CONSTRAINED`);
+    };
+
+    if (heaters) {
+      heaters.forEach(h => markConstraint(h, HEATER_CONFIG.width, HEATER_CONFIG.depth, "HEATER"));
+    }
+    if (acs) {
+      acs.forEach(ac => markConstraint(ac, AC_CONFIG.width, AC_CONFIG.depth, "AC"));
+    }
+
+    console.log("Constraint mask generated - Border: ALL=1, Active devices: 1, Rest: 0");
+
+    // Return both temperature payload and constraint mask
+    return {
+      temperatures: payload,
+      constraints: constraints
+    };
+  }
+
+  /**
+   * Apply temperature data from payload to visual grid particles
+   * @param {Object} payloadData - Object with {temperatures: Array, constraints: Array}
+   */
+  applyPayloadToGrid(payloadData) {
+    if (!payloadData || !payloadData.temperatures) return;
+
+    const payload = payloadData.temperatures;
+    const constraints = payloadData.constraints; // Optional, for debugging
+
+    const step = 1 / this.density;
+    const houseHalfSize = HOUSE_CONFIG.size / 2;
+    const wallThickness = HOUSE_CONFIG.wallThickness;
+    const innerHalf = houseHalfSize + wallThickness; // 5.3
+
+    // Calculate same bounds as in getSimulationPayload
+    const startI = Math.ceil((-innerHalf - this.minX) / step);
+    const endI = Math.floor((innerHalf - this.minX) / step);
+    const startJ = Math.ceil((-innerHalf - this.minZ) / step);
+    const endJ = Math.floor((innerHalf - this.minZ) / step);
+
+    const width = endI - startI + 1;
+    const height = endJ - startJ + 1;
+
+    // Payload structure: [width+2][height+2]
+    // Indices [0] and [width+1] are borders (X direction)
+    // Indices [0] and [height+1] are borders (Z direction)
+    // Internal data is at [1..width][1..height]
+
+    console.log(`Applying payload (${payload.length}x${payload[0].length}) to grid...`);
+
+    let updatedCount = 0;
+
+    // Map payload internal temperatures to grid particles
+    for (let x = 0; x < width; x++) {
+      for (let z = 0; z < height; z++) {
+        // Payload indices (skip border: +1)
+        const payloadX = x + 1;
+        const payloadZ = z + 1;
+
+        // Grid particle indices
+        const gridI = startI + x;
+        const gridJ = startJ + z;
+
+        // 1D particle array index
+        const particleIndex = gridJ * this.cols + gridI;
+
+        if (particleIndex >= 0 && particleIndex < this.particles.length) {
+          const newTemp = payload[payloadX][payloadZ];
+          this.particles[particleIndex].temp = newTemp;
+          this.particles[particleIndex].updateColor();
+          updatedCount++;
+        }
+      }
+    }
+
+    // Map world position to internal grid indices
+    const minInternalX = this.minX + startI * step;
+    const minInternalZ = this.minZ + startJ * step;
+
+    // Entities can be rotated based on direction
+    // For entities facing north/south: width along X, depth along Z
+    // For entities facing east/west: width along Z, depth along X
+    let widthX, depthZ;
+
+    if (dir === 'north' || dir === 'south') {
+      widthX = entityWidth;
+      depthZ = entityDepth;
+    } else {
+      // Rotated 90 degrees
+      widthX = entityDepth;
+      depthZ = entityWidth;
+    }
+
+    // Calculate world coordinate bounds (entity centered at pos)
+    const startX = pos.x - widthX / 2;
+    const endX = pos.x + widthX / 2;
+    const startZ = pos.z - depthZ / 2;
+    const endZ = pos.z + depthZ / 2;
+
+    console.log(`${typeName} at (${pos.x}, ${pos.z}) dir:${dir}, covering X:[${startX},${endX}] Z:[${startZ},${endZ}]`);
+
+    // Map to payload indices
+    const idxStartX = Math.floor((startX - minInternalX) / step);
+    const idxEndX = Math.ceil((endX - minInternalX) / step);
+    const idxStartZ = Math.floor((startZ - minInternalZ) / step);
+    const idxEndZ = Math.ceil((endZ - minInternalZ) / step);
+
+    // Clamp to valid bounds
+    const validStartX = Math.max(0, idxStartX);
+    const validEndX = Math.min(width - 1, idxEndX);
+    const validStartZ = Math.max(0, idxStartZ);
+    const validEndZ = Math.min(height - 1, idxEndZ);
+
+    console.log(`  Payload indices: X:[${validStartX},${validEndX}] Z:[${validStartZ},${validEndZ}]`);
+
+    // Set temperature for all particles in this area
+    let count = 0;
+    for (let i = validStartX; i <= validEndX; i++) {
+      for (let j = validStartZ; j <= validEndZ; j++) {
+        payload[i + 1][j + 1] = temp;
+        count++;
+      }
+    }
+
+    console.log(`  Set ${count} particles to ${temp}°C`);
+  };
+
+  if(heaters) {
+    console.log("Processing heaters:", heaters);
+    heaters.forEach(h => applyClimateControl(h, HEATER_TEMP, HEATER_CONFIG.width, HEATER_CONFIG.depth, "HEATER"));
+  }
+  if(acs) {
+    console.log("Processing ACs:", acs);
+    acs.forEach(ac => applyClimateControl(ac, AC_TEMP, AC_CONFIG.width, AC_CONFIG.depth, "AC"));
+  }
+
+  // 7. Generate Constraint Mask
+  // 1 = Temperature is FIXED (not affected by finite differences)
+  // 0 = Temperature can be MODIFIED by physics simulation
+  const constraints = Array(width + 2).fill().map(() => Array(height + 2).fill(0));
+
+  // 7a. All borders are ALWAYS fixed (1)
+  // Top and Bottom borders
+  for(let x = 0; x <width + 2; x++) {
+  constraints[x][0] = 1;           // Top border
+  constraints[x][height + 1] = 1;  // Bottom border
+}
+// Left and Right borders
+for (let y = 0; y < height + 2; y++) {
+  constraints[0][y] = 1;           // Left border
+  constraints[width + 1][y] = 1;   // Right border
+}
+
+// 7b. Active heaters/ACs have fixed temperatures
+const markConstraint = (entity, entityWidth, entityDepth, typeName) => {
+  if (!entity.isActive) return; // Inactive = no constraint (0)
+
+  const pos = entity.position;
+  const dir = entity.userData?.direction || entity.direction;
+
+  const minInternalX = this.minX + startI * step;
+  const minInternalZ = this.minZ + startJ * step;
+
+  let widthX, depthZ;
+  if (dir === 'north' || dir === 'south') {
+    widthX = entityWidth;
+    depthZ = entityDepth;
+  } else {
+    widthX = entityDepth;
+    depthZ = entityWidth;
+  }
+
+  const startX = pos.x - widthX / 2;
+  const endX = pos.x + widthX / 2;
+  const startZ = pos.z - depthZ / 2;
+  const endZ = pos.z + depthZ / 2;
+
+  const idxStartX = Math.floor((startX - minInternalX) / step);
+  const idxEndX = Math.ceil((endX - minInternalX) / step);
+  const idxStartZ = Math.floor((startZ - minInternalZ) / step);
+  const idxEndZ = Math.ceil((endZ - minInternalZ) / step);
+
+  const validStartX = Math.max(0, idxStartX);
+  const validEndX = Math.min(width - 1, idxEndX);
+  const validStartZ = Math.max(0, idxStartZ);
+  const validEndZ = Math.min(height - 1, idxEndZ);
+
+  // Mark as constrained (1)
+  let count = 0;
+  for (let i = validStartX; i <= validEndX; i++) {
+    for (let j = validStartZ; j <= validEndZ; j++) {
+      constraints[i + 1][j + 1] = 1;
+      count++;
+    }
+  }
+  console.log(`  ${typeName} marked ${count} particles as CONSTRAINED`);
+};
+
+if (heaters) {
+  heaters.forEach(h => markConstraint(h, HEATER_CONFIG.width, HEATER_CONFIG.depth, "HEATER"));
+}
+if (acs) {
+  acs.forEach(ac => markConstraint(ac, AC_CONFIG.width, AC_CONFIG.depth, "AC"));
+}
+
+console.log("Constraint mask generated - Border: ALL=1, Active devices: 1, Rest: 0");
+
+// Return both temperature payload and constraint mask
+return {
+  temperatures: payload,
+  constraints: constraints
+};
+  }
+
+/**
+ * Apply temperature data from payload to visual grid particles
+ * @param {Object} payloadData - Object with {temperatures: Array, constraints: Array}
+ */
+applyPayloadToGrid(payloadData) {
+  if (!payloadData || !payloadData.temperatures) return;
+
+  const payload = payloadData.temperatures;
+  const constraints = payloadData.constraints; // Optional, for debugging
+
+  const step = 1 / this.density;
+  const houseHalfSize = HOUSE_CONFIG.size / 2;
+  const wallThickness = HOUSE_CONFIG.wallThickness;
+  const innerHalf = houseHalfSize + wallThickness; // 5.3
+
+  // Calculate same bounds as in getSimulationPayload
+  const startI = Math.ceil((-innerHalf - this.minX) / step);
+  const endI = Math.floor((innerHalf - this.minX) / step);
+  const startJ = Math.ceil((-innerHalf - this.minZ) / step);
+  const endJ = Math.floor((innerHalf - this.minZ) / step);
+
+  const width = endI - startI + 1;
+  const height = endJ - startJ + 1;
+
+  // Payload structure: [width+2][height+2]
+  // Indices [0] and [width+1] are borders (X direction)
+  // Indices [0] and [height+1] are borders (Z direction)
+  // Internal data is at [1..width][1..height]
+
+  console.log(`Applying payload (${payload.length}x${payload[0].length}) to grid...`);
+
+  let updatedCount = 0;
+
+  // Map payload internal temperatures to grid particles
+  for (let x = 0; x < width; x++) {
+    for (let z = 0; z < height; z++) {
+      // Payload indices (skip border: +1)
+      const payloadX = x + 1;
+      const payloadZ = z + 1;
+
+      // Grid particle indices
+      const gridI = startI + x;
+      const gridJ = startJ + z;
+
+      // 1D particle array index
+      const particleIndex = gridJ * this.cols + gridI;
+
+      if (particleIndex >= 0 && particleIndex < this.particles.length) {
+        const newTemp = payload[payloadX][payloadZ];
+        this.particles[particleIndex].temp = newTemp;
+        this.particles[particleIndex].updateColor();
+        updatedCount++;
+      }
+    }
+  }
+
+  console.log(`Updated ${updatedCount} particles from payload`);
+}
+
+update(deltaTime, tempExterna, tempInterna, doors, windows, heaters, acs) {
+  // Generate payload with current conditions
+  const payloadData = this.getSimulationPayload(doors, windows, heaters, acs, tempExterna);
+
+  if (payloadData) {
+    // Apply payload to visual grid (TEST MODE)
+    // In production, this payload would be sent to API, 
+    // API returns updated temperatures, then we'd call applyPayloadToGrid()
+    this.applyPayloadToGrid(payloadData);
+  } else {
+    // Fallback: enforce basic boundary conditions if no payload
+    const houseHalfSize = HOUSE_CONFIG.size / 2;
+    const wallThickness = HOUSE_CONFIG.wallThickness;
+    const innerHalf = houseHalfSize + wallThickness;
+
+    for (const p of this.particles) {
+      if (p.x > -innerHalf && p.x < innerHalf && p.z > -innerHalf && p.z < innerHalf) {
+        p.temp = tempInterna;
+      } else {
+        p.temp = tempExterna;
+      }
+      p.updateColor();
+    }
+  }
+
+  // Debug log payload (throttled)
+  if (Math.random() < 0.01) { // ~1% chance per frame
+    console.log("=== THERMAL GRID UPDATE ===");
+    if (payloadData) {
+      const { temperatures, constraints } = payloadData;
+      console.log(`Payload Dim: ${temperatures.length}x${temperatures[0].length}`);
+      console.log(`Constraints Dim: ${constraints.length}x${constraints[0].length}`);
+
+      // Count constrained cells
+      let constrainedCount = 0;
+      for (let i = 0; i < constraints.length; i++) {
+        for (let j = 0; j < constraints[i].length; j++) {
+          if (constraints[i][j] === 1) constrainedCount++;
+        }
+      }
+      console.log(`Constrained cells: ${constrainedCount} / ${constraints.length * constraints[0].length}`);
+    }
+    console.log("Particles updated from payload");
+  }
+}
+}

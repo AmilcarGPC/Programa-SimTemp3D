@@ -15,18 +15,18 @@ import { createGround } from "../utils/createGround";
 import { createTrees } from "../utils/createTree";
 import { createHouse } from "../utils/createHouse";
 
+// Simulation
+import { ThermalGrid } from "../simulation/ThermalGrid";
+import { ThermalParticlesView } from "../simulation/ThermalParticlesView";
+
 // Entities
 import {
   Door,
   applyDoorCutouts,
-  updateDoorAnimation,
-  toggleDoor,
 } from "../entities/Door";
 import {
   Window,
   applyWindowCutouts,
-  updateWindowAnimation,
-  toggleWindow,
 } from "../entities/Window";
 import { Heater } from "../entities/Heater";
 import { AirConditioner } from "../entities/AirConditioner";
@@ -52,20 +52,27 @@ const ThermalHouseSimulator = () => {
   const [tempInterna, setTempInterna] = useState(
     UI_CONFIG.temperature.internal.default
   );
+
+  // Force update state from config if defaults change (dev helper)
+  useEffect(() => {
+    setTempExterna(UI_CONFIG.temperature.external.default);
+    setTempInterna(UI_CONFIG.temperature.internal.default);
+  }, []);
   const [wallsMeshRef, setWallsMeshRef] = useState(null);
   const [contextMenu, setContextMenu] = useState(null);
   const [draggedDoor, setDraggedDoor] = useState(null);
   const dragStartPos = useRef(null);
+
+  const [showGrid, setShowGrid] = useState(true);
+  const [gridDensity, setGridDensity] = useState(2); // Default 2x2 per unit
+  const gridRef = useRef(null);
+  const particlesViewRef = useRef(null);
 
   // Hooks personalizados para gestionar la escena 3D
   const { scene, camera, renderer } = useThreeScene(containerRef);
   useLighting(scene);
   const composer = usePostProcessing(renderer, scene, camera);
   useWindowResize(camera, renderer, composer, containerRef);
-  const fps = useAnimationLoop(composer);
-
-  // Hook para efectos visuales térmicos
-  useThermalEffects(scene, tempExterna, tempInterna);
 
   // Door state previously provided by useDoors wrapper
   const [placementMode, setPlacementMode] = React.useState(false);
@@ -133,6 +140,57 @@ const ThermalHouseSimulator = () => {
     createEntity: ({ position, direction, id } = {}) =>
       AirConditioner({ position, direction, id }),
   });
+
+  // Callback de animación para actualizar simulación
+  const handleFrame = React.useCallback(
+    (deltaTime) => {
+      if (gridRef.current) {
+        gridRef.current.update(deltaTime, tempExterna, tempInterna, doors, windows, heaters, acs);
+      }
+      if (particlesViewRef.current && showGrid) {
+        particlesViewRef.current.update();
+      }
+    },
+    [tempExterna, tempInterna, showGrid, doors, windows, heaters, acs]
+  );
+
+  const fps = useAnimationLoop(composer, handleFrame);
+
+  // Hook para efectos visuales térmicos - REMOVED as per user request
+  // useThermalEffects(scene, tempExterna, tempInterna);
+
+  // Inicializar Grid y Partículas
+  useEffect(() => {
+    if (!scene) return;
+
+    // Crear Grid
+    // Definimos el área: -15 a 15 en X, -10 a 10 en Z
+    // Densidad: variable (1 a 4)
+    const grid = new ThermalGrid(-15, 15, -10, 10, gridDensity);
+    gridRef.current = grid;
+
+    // Crear Vista
+    const view = new ThermalParticlesView(grid);
+    particlesViewRef.current = view;
+    scene.add(view.mesh);
+
+    return () => {
+      if (view) {
+        scene.remove(view.mesh);
+        view.dispose();
+      }
+    };
+  }, [scene, gridDensity]); // Re-create when density changes
+
+  // Toggle visibility
+  useEffect(() => {
+    if (particlesViewRef.current && particlesViewRef.current.mesh) {
+      particlesViewRef.current.mesh.visible = showGrid;
+    }
+  }, [showGrid]);
+
+  // Door state previously provided by useDoors wrapper
+
 
   // Inicializar la escena con objetos 3D
   useEffect(() => {
@@ -224,14 +282,14 @@ const ThermalHouseSimulator = () => {
             closestWall === "east"
               ? halfSize
               : closestWall === "west"
-              ? -halfSize
-              : intersectPoint.x,
+                ? -halfSize
+                : intersectPoint.x,
           z:
             closestWall === "north"
               ? -halfSize
               : closestWall === "south"
-              ? halfSize
-              : intersectPoint.z,
+                ? halfSize
+                : intersectPoint.z,
         };
 
         // Snap a valores enteros
@@ -581,11 +639,7 @@ const ThermalHouseSimulator = () => {
                 break;
             }
 
-            if (draggedDoor.userData.type === "door") {
-              updateDoorPosition(draggedDoor, newPosition);
-            } else if (draggedDoor.userData.type === "window") {
-              updateWindowPosition(draggedDoor, newPosition);
-            } else if (draggedDoor.userData.type === "aircon") {
+            if (draggedDoor.userData.type === "aircon") {
               // Discrete preview move: snap to integer grid and call previewMoveAircon
               const snapped = snapToGrid(newPosition);
               // previewMoveAircon will apply snap & inset visually
@@ -593,6 +647,18 @@ const ThermalHouseSimulator = () => {
                 previewMoveAircon(draggedDoor.userData.id, snapped);
               } catch (e) {
                 console.log("Preview move aircon error:", e);
+              }
+            } else {
+              // For door/window use the previewMove handlers supplied by useEntities
+              const snapped = snapToGrid(newPosition);
+              try {
+                if (draggedDoor.userData.type === "door") {
+                  previewMoveDoor(draggedDoor.userData.id, snapped);
+                } else if (draggedDoor.userData.type === "window") {
+                  previewMoveWindow(draggedDoor.userData.id, snapped);
+                }
+              } catch (e) {
+                console.log("Preview move error:", e);
               }
             }
           }
@@ -909,7 +975,11 @@ const ThermalHouseSimulator = () => {
 
   // Reconstruir paredes automáticamente cuando cambian las puertas
   useEffect(() => {
+    // If a user is actively dragging an entity, skip automatic rebuilds
+    // so preview moves don't trigger CSG cut operations. The drag handler
+    // already manages a temporary wall mesh while dragging.
     if (!scene || !wallsMeshRef) return;
+    if (draggedDoor && draggedDoor.userData?.isDragging) return;
 
     // Remover paredes antiguas
     scene.remove(wallsMeshRef);
@@ -958,6 +1028,10 @@ const ThermalHouseSimulator = () => {
         tempInterna={tempInterna}
         onTempExternaChange={setTempExterna}
         onTempInternaChange={setTempInterna}
+        showGrid={showGrid}
+        onShowGridChange={setShowGrid}
+        gridDensity={gridDensity}
+        onGridDensityChange={setGridDensity}
         doorControlProps={{
           doors,
           onToggleDoor: toggleDoorState,

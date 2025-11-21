@@ -130,6 +130,7 @@ export class EntityBase extends THREE.Group {
       type: this.userData.type,
       position: { x: base.x, z: base.z },
       direction: this.userData.direction,
+      isActive: this.userData.isActive,
     };
   }
 }

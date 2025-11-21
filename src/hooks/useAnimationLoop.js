@@ -1,12 +1,19 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 
 /**
  * Hook para calcular y actualizar FPS
  * @param {EffectComposer} composer - El composer para renderizar
+ * @param {Function} onFrame - Callback para cada frame
  * @returns {number} FPS actual
  */
-export const useAnimationLoop = (composer) => {
+export const useAnimationLoop = (composer, onFrame) => {
   const [fps, setFps] = useState(60);
+  const callbackRef = useRef(onFrame);
+
+  // Keep callback ref updated
+  useEffect(() => {
+    callbackRef.current = onFrame;
+  }, [onFrame]);
 
   useEffect(() => {
     if (!composer) return;
@@ -22,6 +29,11 @@ export const useAnimationLoop = (composer) => {
       const currentTime = performance.now();
       const deltaTime = (currentTime - lastTime) / 1000;
       lastTime = currentTime;
+
+      // Custom update logic using ref
+      if (callbackRef.current) {
+        callbackRef.current(deltaTime);
+      }
 
       composer.render(deltaTime);
 
@@ -42,7 +54,7 @@ export const useAnimationLoop = (composer) => {
         cancelAnimationFrame(animationId);
       }
     };
-  }, [composer]);
+  }, [composer]); // Removed onFrame from dependencies to avoid restarts
 
   return fps;
 };

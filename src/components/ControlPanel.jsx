@@ -12,6 +12,10 @@ const ControlPanel = ({
   tempInterna,
   onTempExternaChange,
   onTempInternaChange,
+  showGrid,
+  onShowGridChange,
+  gridDensity,
+  onGridDensityChange,
   doorControlProps,
   windowControlProps,
 }) => {
@@ -47,6 +51,35 @@ const ControlPanel = ({
           max={internal.max}
           value={tempInterna}
           onChange={(e) => onTempInternaChange(Number(e.target.value))}
+          className="control-panel__slider"
+        />
+      </div>
+
+      {/* Visualización */}
+      <div className="control-panel__control-group">
+        <label className="control-panel__label checkbox-label">
+          <input
+            type="checkbox"
+            checked={showGrid}
+            onChange={(e) => onShowGridChange(e.target.checked)}
+            style={{ marginRight: "8px" }}
+          />
+          Mostrar Grid Térmico
+        </label>
+      </div>
+
+      {/* Densidad del Grid */}
+      <div className="control-panel__control-group">
+        <label className="control-panel__label">
+          Densidad: {gridDensity}x{gridDensity}
+        </label>
+        <input
+          type="range"
+          min={1}
+          max={4}
+          step={1}
+          value={gridDensity}
+          onChange={(e) => onGridDensityChange(Number(e.target.value))}
           className="control-panel__slider"
         />
       </div>

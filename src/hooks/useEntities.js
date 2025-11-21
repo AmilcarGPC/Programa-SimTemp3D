@@ -87,9 +87,17 @@ export const useEntities = (scene, options = {}) => {
         scene.children.find(
           (c) => c.userData && c.userData.type === type && c.userData.id === id
         );
-      if (obj && typeof obj.toggle === "function") obj.toggle();
+      if (obj && typeof obj.toggle === "function") {
+        obj.toggle();
+        // Sync state after toggle
+        setItems((prev) =>
+          prev.map((item) =>
+            item.id === id ? toStateInfo(obj) : item
+          )
+        );
+      }
     },
-    [scene, type]
+    [scene, type, toStateInfo]
   );
 
   const updateItemPositionInState = useCallback((id, pos) => {
@@ -104,7 +112,7 @@ export const useEntities = (scene, options = {}) => {
         try {
           console.log("UIPS", id, pos, prevBase);
           obj.onMove(prevBase, pos);
-        } catch (e) {}
+        } catch (e) { }
       } else if (typeof positionMapper === "function") {
         positionMapper(pos, obj);
       } else {
@@ -157,10 +165,10 @@ export const useEntities = (scene, options = {}) => {
       const ok =
         typeof obj.moveTo === "function"
           ? obj.moveTo(newBasePos, {
-              validate: false,
-              snap: true,
-              instant: true,
-            })
+            validate: false,
+            snap: true,
+            instant: true,
+          })
           : false;
       if (ok) {
         const p =
