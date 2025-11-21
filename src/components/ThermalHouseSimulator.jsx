@@ -65,6 +65,7 @@ const ThermalHouseSimulator = () => {
 
   const [showGrid, setShowGrid] = useState(true);
   const [gridDensity, setGridDensity] = useState(2); // Default 2x2 per unit
+  const [simulationSpeed, setSimulationSpeed] = useState(10); // Default 10x speed
   const gridRef = useRef(null);
   const particlesViewRef = useRef(null);
 
@@ -145,13 +146,13 @@ const ThermalHouseSimulator = () => {
   const handleFrame = React.useCallback(
     (deltaTime) => {
       if (gridRef.current) {
-        gridRef.current.update(deltaTime, tempExterna, tempInterna, doors, windows, heaters, acs);
+        gridRef.current.update(deltaTime, tempExterna, tempInterna, doors, windows, heaters, acs, simulationSpeed);
       }
       if (particlesViewRef.current && showGrid) {
         particlesViewRef.current.update();
       }
     },
-    [tempExterna, tempInterna, showGrid, doors, windows, heaters, acs]
+    [tempExterna, tempInterna, showGrid, doors, windows, heaters, acs, simulationSpeed]
   );
 
   const fps = useAnimationLoop(composer, handleFrame);
@@ -1032,6 +1033,8 @@ const ThermalHouseSimulator = () => {
         onShowGridChange={setShowGrid}
         gridDensity={gridDensity}
         onGridDensityChange={setGridDensity}
+        simulationSpeed={simulationSpeed}
+        onSimulationSpeedChange={setSimulationSpeed}
         doorControlProps={{
           doors,
           onToggleDoor: toggleDoorState,

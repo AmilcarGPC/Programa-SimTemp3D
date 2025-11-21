@@ -16,6 +16,8 @@ const ControlPanel = ({
   onShowGridChange,
   gridDensity,
   onGridDensityChange,
+  simulationSpeed,
+  onSimulationSpeedChange,
   doorControlProps,
   windowControlProps,
 }) => {
@@ -80,6 +82,22 @@ const ControlPanel = ({
           step={1}
           value={gridDensity}
           onChange={(e) => onGridDensityChange(Number(e.target.value))}
+          className="control-panel__slider"
+        />
+      </div>
+
+      {/* Velocidad de Simulación */}
+      <div className="control-panel__control-group">
+        <label className="control-panel__label">
+          Velocidad de Simulación: {simulationSpeed}x
+        </label>
+        <input
+          type="range"
+          min={1}
+          max={20}
+          step={1}
+          value={simulationSpeed}
+          onChange={(e) => onSimulationSpeedChange(Number(e.target.value))}
           className="control-panel__slider"
         />
       </div>
