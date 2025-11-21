@@ -1,7 +1,5 @@
 import React from "react";
 import { UI_CONFIG } from "../config/sceneConfig";
-import DoorControl from "./DoorControl";
-import WindowControl from "./WindowControl";
 import "./ControlPanel.css";
 
 /**
@@ -18,8 +16,7 @@ const ControlPanel = ({
   onGridDensityChange,
   simulationSpeed,
   onSimulationSpeedChange,
-  doorControlProps,
-  windowControlProps,
+  onReset,
 }) => {
   const { external, internal } = UI_CONFIG.temperature;
 
@@ -102,47 +99,26 @@ const ControlPanel = ({
         />
       </div>
 
-      {/* Control de puertas */}
-      {doorControlProps && <DoorControl {...doorControlProps} />}
-      {windowControlProps && <WindowControl {...windowControlProps} />}
+      {/* Se eliminan controles de puerta/ventana: gestión externa */}
 
       {/* Botones de acción */}
       <div className="control-panel__actions">
         <button
-          className="control-panel__button control-panel__button--add-window"
-          disabled
-          title="Próximamente"
-        >
-          + Añadir Ventana
-        </button>
-
-        <button
-          className="control-panel__button control-panel__button--add-heater"
-          disabled
-          title="Próximamente"
-        >
-          + Añadir Calefactor
-        </button>
-
-        <button
           className="control-panel__button control-panel__button--reset"
           onClick={() => {
+            if (onReset) {
+              onReset();
+              return;
+            }
             onTempExternaChange(external.default);
             onTempInternaChange(internal.default);
           }}
         >
-          🔄 Reiniciar
+          Reiniciar
         </button>
       </div>
 
-      {/* Panel de información */}
-      <div className="control-panel__info">
-        <p>
-          <strong>Día 1:</strong> Entorno base
-        </p>
-        <p>Casa 10×10m sin techo</p>
-        <p>Vista arquitectónica fija</p>
-      </div>
+      {/* Panel de información (eliminada la línea 'Día 1') */}
     </div>
   );
 };

@@ -1,6 +1,11 @@
 import * as THREE from "three";
 import { HOUSE_CONFIG } from "../config/sceneConfig";
-import { DOOR_CONFIG, WINDOW_CONFIG, AC_CONFIG, HEATER_CONFIG } from "../config/entityConfig";
+import {
+  DOOR_CONFIG,
+  WINDOW_CONFIG,
+  AC_CONFIG,
+  HEATER_CONFIG,
+} from "../config/entityConfig";
 import { ThermalSimulation } from "./ThermalSimulation";
 
 export class Particle {
@@ -45,7 +50,12 @@ export class ThermalGrid {
     for (let z = this.minZ; z <= this.maxZ; z += step) {
       for (let x = this.minX; x <= this.maxX; x += step) {
         let temp = 45;
-        if (x > -innerHalf && x < innerHalf && z > -innerHalf && z < innerHalf) {
+        if (
+          x > -innerHalf &&
+          x < innerHalf &&
+          z > -innerHalf &&
+          z < innerHalf
+        ) {
           temp = -10;
         }
         this.particles.push(new Particle(x, z, temp));
@@ -69,7 +79,9 @@ export class ThermalGrid {
 
     if (width <= 0 || height <= 0) return null;
 
-    const payload = Array(width + 2).fill().map(() => Array(height + 2).fill(0));
+    const payload = Array(width + 2)
+      .fill()
+      .map(() => Array(height + 2).fill(0));
 
     for (let x = 0; x < width; x++) {
       for (let y = 0; y < height; y++) {
@@ -101,7 +113,7 @@ export class ThermalGrid {
       if (!entity.isActive) return;
       const pos = entity.position;
       const dir = entity.userData?.direction || entity.direction;
-      let isHorizontal = (dir === 'north' || dir === 'south');
+      let isHorizontal = dir === "north" || dir === "south";
 
       if (isHorizontal) {
         const startX = pos.x - entityWidth / 2;
@@ -111,7 +123,7 @@ export class ThermalGrid {
         const idxEnd = Math.ceil((endX - minInternalX) / step);
         const validStart = Math.max(0, idxStart);
         const validEnd = Math.min(width - 1, idxEnd);
-        const yIndex = (dir === 'north') ? 0 : height + 1;
+        const yIndex = dir === "north" ? 0 : height + 1;
         for (let i = validStart; i <= validEnd; i++) {
           payload[i + 1][yIndex] = tempExterna;
         }
@@ -123,15 +135,15 @@ export class ThermalGrid {
         const idxEnd = Math.ceil((endZ - minInternalZ) / step);
         const validStart = Math.max(0, idxStart);
         const validEnd = Math.min(height - 1, idxEnd);
-        const xIndex = (dir === 'west') ? 0 : width + 1;
+        const xIndex = dir === "west" ? 0 : width + 1;
         for (let j = validStart; j <= validEnd; j++) {
           payload[xIndex][j + 1] = tempExterna;
         }
       }
     };
 
-    if (doors) doors.forEach(d => applyOpening(d, DOOR_CONFIG.width));
-    if (windows) windows.forEach(w => applyOpening(w, WINDOW_CONFIG.width));
+    if (doors) doors.forEach((d) => applyOpening(d, DOOR_CONFIG.width));
+    if (windows) windows.forEach((w) => applyOpening(w, WINDOW_CONFIG.width));
 
     const HEATER_TEMP = 25;
     const AC_TEMP = 16;
@@ -144,7 +156,7 @@ export class ThermalGrid {
       const minInternalZ = this.minZ + startJ * step;
 
       let widthX, depthZ;
-      if (dir === 'north' || dir === 'south') {
+      if (dir === "north" || dir === "south") {
         widthX = entityWidth;
         depthZ = entityDepth;
       } else {
@@ -174,10 +186,23 @@ export class ThermalGrid {
       }
     };
 
-    if (heaters) heaters.forEach(h => applyClimateControl(h, HEATER_TEMP, HEATER_CONFIG.width, HEATER_CONFIG.depth));
-    if (acs) acs.forEach(ac => applyClimateControl(ac, AC_TEMP, AC_CONFIG.width, AC_CONFIG.depth));
+    if (heaters)
+      heaters.forEach((h) =>
+        applyClimateControl(
+          h,
+          HEATER_TEMP,
+          HEATER_CONFIG.width,
+          HEATER_CONFIG.depth
+        )
+      );
+    if (acs)
+      acs.forEach((ac) =>
+        applyClimateControl(ac, AC_TEMP, AC_CONFIG.width, AC_CONFIG.depth)
+      );
 
-    const constraints = Array(width + 2).fill().map(() => Array(height + 2).fill(0));
+    const constraints = Array(width + 2)
+      .fill()
+      .map(() => Array(height + 2).fill(0));
 
     for (let x = 0; x < width + 2; x++) {
       constraints[x][0] = 1;
@@ -196,7 +221,7 @@ export class ThermalGrid {
       const minInternalZ = this.minZ + startJ * step;
 
       let widthX, depthZ;
-      if (dir === 'north' || dir === 'south') {
+      if (dir === "north" || dir === "south") {
         widthX = entityWidth;
         depthZ = entityDepth;
       } else {
@@ -226,12 +251,16 @@ export class ThermalGrid {
       }
     };
 
-    if (heaters) heaters.forEach(h => markConstraint(h, HEATER_CONFIG.width, HEATER_CONFIG.depth));
-    if (acs) acs.forEach(ac => markConstraint(ac, AC_CONFIG.width, AC_CONFIG.depth));
+    if (heaters)
+      heaters.forEach((h) =>
+        markConstraint(h, HEATER_CONFIG.width, HEATER_CONFIG.depth)
+      );
+    if (acs)
+      acs.forEach((ac) => markConstraint(ac, AC_CONFIG.width, AC_CONFIG.depth));
 
     return {
       temperatures: payload,
-      constraints: constraints
+      constraints: constraints,
     };
   }
 
@@ -268,8 +297,44 @@ export class ThermalGrid {
     }
   }
 
-  update(deltaTime, tempExterna, tempInterna, doors, windows, heaters, acs, simulationSpeed = 10) {
-    const payloadData = this.getSimulationPayload(doors, windows, heaters, acs, tempExterna);
+  // Reset the grid particles to given external/internal temperatures
+  reset(initialExternal, initialInternal) {
+    const houseHalfSize = HOUSE_CONFIG.size / 2;
+    const wallThickness = HOUSE_CONFIG.wallThickness;
+    const innerHalf = houseHalfSize + wallThickness;
+
+    for (const p of this.particles) {
+      if (
+        p.x > -innerHalf &&
+        p.x < innerHalf &&
+        p.z > -innerHalf &&
+        p.z < innerHalf
+      ) {
+        p.temp = initialInternal;
+      } else {
+        p.temp = initialExternal;
+      }
+      p.updateColor();
+    }
+  }
+
+  update(
+    deltaTime,
+    tempExterna,
+    tempInterna,
+    doors,
+    windows,
+    heaters,
+    acs,
+    simulationSpeed = 10
+  ) {
+    const payloadData = this.getSimulationPayload(
+      doors,
+      windows,
+      heaters,
+      acs,
+      tempExterna
+    );
 
     if (payloadData) {
       const { temperatures, constraints } = payloadData;
@@ -290,7 +355,7 @@ export class ThermalGrid {
 
       this.applyPayloadToGrid({
         temperatures: currentTemp,
-        constraints: constraints
+        constraints: constraints,
       });
     } else {
       const houseHalfSize = HOUSE_CONFIG.size / 2;
@@ -298,7 +363,12 @@ export class ThermalGrid {
       const innerHalf = houseHalfSize + wallThickness;
 
       for (const p of this.particles) {
-        if (p.x > -innerHalf && p.x < innerHalf && p.z > -innerHalf && p.z < innerHalf) {
+        if (
+          p.x > -innerHalf &&
+          p.x < innerHalf &&
+          p.z > -innerHalf &&
+          p.z < innerHalf
+        ) {
           p.temp = tempInterna;
         } else {
           p.temp = tempExterna;

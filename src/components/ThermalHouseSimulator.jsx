@@ -20,14 +20,8 @@ import { ThermalGrid } from "../simulation/ThermalGrid";
 import { ThermalParticlesView } from "../simulation/ThermalParticlesView";
 
 // Entities
-import {
-  Door,
-  applyDoorCutouts,
-} from "../entities/Door";
-import {
-  Window,
-  applyWindowCutouts,
-} from "../entities/Window";
+import { Door, applyDoorCutouts } from "../entities/Door";
+import { Window, applyWindowCutouts } from "../entities/Window";
 import { Heater } from "../entities/Heater";
 import { AirConditioner } from "../entities/AirConditioner";
 
@@ -68,6 +62,7 @@ const ThermalHouseSimulator = () => {
   const [simulationSpeed, setSimulationSpeed] = useState(10); // Default 10x speed
   const gridRef = useRef(null);
   const particlesViewRef = useRef(null);
+  const [avgInternalTemp, setAvgInternalTemp] = useState(null);
 
   // Hooks personalizados para gestionar la escena 3D
   const { scene, camera, renderer } = useThreeScene(containerRef);
@@ -146,13 +141,57 @@ const ThermalHouseSimulator = () => {
   const handleFrame = React.useCallback(
     (deltaTime) => {
       if (gridRef.current) {
-        gridRef.current.update(deltaTime, tempExterna, tempInterna, doors, windows, heaters, acs, simulationSpeed);
+        gridRef.current.update(
+          deltaTime,
+          tempExterna,
+          tempInterna,
+          doors,
+          windows,
+          heaters,
+          acs,
+          simulationSpeed
+        );
       }
       if (particlesViewRef.current && showGrid) {
         particlesViewRef.current.update();
       }
+
+      // calcular temperatura interior promedio (partículas dentro del interior)
+      try {
+        if (gridRef.current && gridRef.current.particles) {
+          const particles = gridRef.current.particles;
+          const houseHalfSize = HOUSE_CONFIG.size / 2;
+          const wallThickness = HOUSE_CONFIG.wallThickness;
+          const innerHalf = houseHalfSize + wallThickness;
+          let sum = 0;
+          let count = 0;
+          for (const p of particles) {
+            if (
+              p.x > -innerHalf &&
+              p.x < innerHalf &&
+              p.z > -innerHalf &&
+              p.z < innerHalf
+            ) {
+              sum += p.temp;
+              count += 1;
+            }
+          }
+          if (count > 0) setAvgInternalTemp(sum / count);
+        }
+      } catch (e) {
+        // ignore errors calculating average
+      }
     },
-    [tempExterna, tempInterna, showGrid, doors, windows, heaters, acs, simulationSpeed]
+    [
+      tempExterna,
+      tempInterna,
+      showGrid,
+      doors,
+      windows,
+      heaters,
+      acs,
+      simulationSpeed,
+    ]
   );
 
   const fps = useAnimationLoop(composer, handleFrame);
@@ -183,6 +222,24 @@ const ThermalHouseSimulator = () => {
     };
   }, [scene, gridDensity]); // Re-create when density changes
 
+  // If the external/internal sliders change, reset the thermal grid state
+  useEffect(() => {
+    if (gridRef.current) {
+      try {
+        gridRef.current.reset(tempExterna, tempInterna);
+      } catch (e) {
+        console.warn("Failed to reset thermal grid:", e);
+      }
+    }
+    if (particlesViewRef.current) {
+      try {
+        particlesViewRef.current.update();
+      } catch (e) {
+        // ignore
+      }
+    }
+  }, [tempExterna, tempInterna]);
+
   // Toggle visibility
   useEffect(() => {
     if (particlesViewRef.current && particlesViewRef.current.mesh) {
@@ -191,7 +248,6 @@ const ThermalHouseSimulator = () => {
   }, [showGrid]);
 
   // Door state previously provided by useDoors wrapper
-
 
   // Inicializar la escena con objetos 3D
   useEffect(() => {
@@ -283,14 +339,14 @@ const ThermalHouseSimulator = () => {
             closestWall === "east"
               ? halfSize
               : closestWall === "west"
-                ? -halfSize
-                : intersectPoint.x,
+              ? -halfSize
+              : intersectPoint.x,
           z:
             closestWall === "north"
               ? -halfSize
               : closestWall === "south"
-                ? halfSize
-                : intersectPoint.z,
+              ? halfSize
+              : intersectPoint.z,
         };
 
         // Snap a valores enteros
@@ -1035,16 +1091,33 @@ const ThermalHouseSimulator = () => {
         onGridDensityChange={setGridDensity}
         simulationSpeed={simulationSpeed}
         onSimulationSpeedChange={setSimulationSpeed}
-        doorControlProps={{
-          doors,
-          onToggleDoor: toggleDoorState,
-          onRemoveDoor: removeDoor,
-          onClearAll: clearAllDoors,
-          onRebuildWalls: handleRebuildWalls,
+        onReset={() => {
+          setTempExterna(UI_CONFIG.temperature.external.default);
+          setTempInterna(UI_CONFIG.temperature.internal.default);
+          if (gridRef.current && typeof gridRef.current.reset === "function") {
+            try {
+              gridRef.current.reset(
+                UI_CONFIG.temperature.external.default,
+                UI_CONFIG.temperature.internal.default
+              );
+            } catch (e) {
+              console.warn("Grid reset failed:", e);
+            }
+          }
+          if (
+            particlesViewRef.current &&
+            typeof particlesViewRef.current.update === "function"
+          ) {
+            try {
+              particlesViewRef.current.update();
+            } catch (e) {
+              // ignore
+            }
+          }
         }}
       />
 
-      <MetricsBar fps={fps} />
+      <MetricsBar avgInternal={avgInternalTemp} />
 
       <ContextMenu
         position={contextMenu}
