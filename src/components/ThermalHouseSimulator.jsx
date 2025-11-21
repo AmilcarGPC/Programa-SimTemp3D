@@ -60,7 +60,7 @@ const ThermalHouseSimulator = () => {
   const [draggedDoor, setDraggedDoor] = useState(null);
   const dragStartPos = useRef(null);
 
-  const [showGrid, setShowGrid] = useState(true);
+  const [showGrid, setShowGrid] = useState(false);
   const [gridDensity, setGridDensity] = useState(2); // Default 2x2 per unit
   const [simulationSpeed, setSimulationSpeed] = useState(10); // Default 10x speed
   const gridRef = useRef(null);
@@ -251,6 +251,8 @@ const ThermalHouseSimulator = () => {
     const view = new ThermalParticlesView(grid);
     particlesViewRef.current = view;
     scene.add(view.mesh);
+    // Ensure the newly created particle mesh respects the current visibility setting
+    if (view.mesh) view.mesh.visible = !!showGrid;
 
     return () => {
       if (view) {
