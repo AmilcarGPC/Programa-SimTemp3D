@@ -1,0 +1,169 @@
+.alert-notification {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  margin-bottom: 12px;
+  border-radius: 8px;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  min-width: 300px;
+  max-width: 450px;
+  animation: slideInRight 0.3s ease-out;
+  transition: all 0.3s ease;
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(100px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Dark theme base */
+.alert-notification--dark {
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+/* Light theme base */
+.alert-notification--light {
+  border: 1px solid rgba(0, 0, 0, 0.12);
+}
+
+/* Error variant */
+.alert-notification--error.alert-notification--dark {
+  background: linear-gradient(135deg, rgba(30, 20, 20, 0.98) 0%, rgba(40, 25, 25, 0.96) 100%);
+  color: #fca5a5;
+  border-color: rgba(248, 113, 113, 0.3);
+}
+
+.alert-notification--error.alert-notification--light {
+  background: linear-gradient(135deg, rgba(254, 242, 242, 0.98) 0%, rgba(255, 250, 250, 0.96) 100%);
+  color: #dc2626;
+  border-color: rgba(220, 38, 38, 0.2);
+}
+
+/* Warning variant */
+.alert-notification--warning.alert-notification--dark {
+  background: linear-gradient(135deg, rgba(30, 25, 20, 0.98) 0%, rgba(40, 35, 25, 0.96) 100%);
+  color: #fcd34d;
+  border-color: rgba(251, 191, 36, 0.3);
+}
+
+.alert-notification--warning.alert-notification--light {
+  background: linear-gradient(135deg, rgba(254, 252, 232, 0.98) 0%, rgba(255, 254, 245, 0.96) 100%);
+  color: #d97706;
+  border-color: rgba(217, 119, 6, 0.2);
+}
+
+/* Info variant */
+.alert-notification--info.alert-notification--dark {
+  background: linear-gradient(135deg, rgba(20, 25, 30, 0.98) 0%, rgba(25, 30, 40, 0.96) 100%);
+  color: #93c5fd;
+  border-color: rgba(96, 165, 250, 0.3);
+}
+
+.alert-notification--info.alert-notification--light {
+  background: linear-gradient(135deg, rgba(239, 246, 255, 0.98) 0%, rgba(248, 250, 255, 0.96) 100%);
+  color: #2563eb;
+  border-color: rgba(37, 99, 235, 0.2);
+}
+
+/* Success variant */
+.alert-notification--success.alert-notification--dark {
+  background: linear-gradient(135deg, rgba(20, 30, 25, 0.98) 0%, rgba(25, 40, 30, 0.96) 100%);
+  color: #86efac;
+  border-color: rgba(74, 222, 128, 0.3);
+}
+
+.alert-notification--success.alert-notification--light {
+  background: linear-gradient(135deg, rgba(240, 253, 244, 0.98) 0%, rgba(248, 255, 250, 0.96) 100%);
+  color: #16a34a;
+  border-color: rgba(22, 163, 74, 0.2);
+}
+
+/* Icon */
+.alert-notification-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.alert-notification--error .alert-notification-icon {
+  color: #f87171;
+}
+
+.alert-notification--error.alert-notification--light .alert-notification-icon {
+  color: #dc2626;
+}
+
+.alert-notification--warning .alert-notification-icon {
+  color: #fbbf24;
+}
+
+.alert-notification--warning.alert-notification--light .alert-notification-icon {
+  color: #d97706;
+}
+
+.alert-notification--info .alert-notification-icon {
+  color: #60a5fa;
+}
+
+.alert-notification--info.alert-notification--light .alert-notification-icon {
+  color: #2563eb;
+}
+
+.alert-notification--success .alert-notification-icon {
+  color: #4ade80;
+}
+
+.alert-notification--success.alert-notification--light .alert-notification-icon {
+  color: #16a34a;
+}
+
+/* Message */
+.alert-notification-message {
+  flex: 1;
+  line-height: 1.5;
+}
+
+/* Close button */
+.alert-notification-close {
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.alert-notification--dark .alert-notification-close {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.alert-notification--light .alert-notification-close {
+  color: rgba(0, 0, 0, 0.5);
+}
+
+.alert-notification--dark .alert-notification-close:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.alert-notification--light .alert-notification-close:hover {
+  background: rgba(0, 0, 0, 0.08);
+  color: rgba(0, 0, 0, 0.8);
+}

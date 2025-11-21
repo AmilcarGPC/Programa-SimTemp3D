@@ -10,15 +10,27 @@
 
 .context-menu {
   position: fixed;
-  background: rgba(255, 255, 255, 0.98);
-  border: 1px solid #ddd;
   border-radius: 8px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
   padding: 8px 0;
-  min-width: 200px;
+  min-width: 220px;
   z-index: 9999;
-  backdrop-filter: blur(10px);
+  backdrop-filter: blur(12px);
   animation: contextMenuFadeIn 0.15s ease-out;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  transition: all 0.3s ease;
+}
+
+.context-menu--dark {
+  background: linear-gradient(135deg, rgba(20, 20, 30, 0.98) 0%, rgba(30, 30, 40, 0.96) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.context-menu--light {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(245, 245, 250, 0.96) 100%);
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
 }
 
 @keyframes contextMenuFadeIn {
@@ -34,17 +46,31 @@
 
 .context-menu-header {
   padding: 8px 16px;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
-  color: #666;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.8px;
+}
+
+.context-menu--dark .context-menu-header {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.context-menu--light .context-menu-header {
+  color: rgba(0, 0, 0, 0.5);
 }
 
 .context-menu-divider {
   height: 1px;
-  background: #e0e0e0;
-  margin: 4px 0;
+  margin: 4px 8px;
+}
+
+.context-menu--dark .context-menu-divider {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.context-menu--light .context-menu-divider {
+  background: rgba(0, 0, 0, 0.08);
 }
 
 .context-menu-item {
@@ -52,23 +78,43 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 16px;
+  padding: 11px 16px;
   border: none;
   background: transparent;
   cursor: pointer;
-  font-size: 14px;
-  color: #333;
+  font-size: 13px;
+  font-weight: 500;
   text-align: left;
-  transition: all 0.15s ease;
+  transition: all 0.2s ease;
+  border-radius: 4px;
+  margin: 0 6px;
+  width: calc(100% - 12px);
 }
 
-.context-menu-item:hover:not(:disabled) {
-  background: rgba(76, 175, 80, 0.1);
-  color: #4caf50;
+.context-menu--dark .context-menu-item {
+  color: rgba(255, 255, 255, 0.9);
 }
 
-.context-menu-item:active:not(:disabled) {
-  background: rgba(76, 175, 80, 0.2);
+.context-menu--light .context-menu-item {
+  color: rgba(0, 0, 0, 0.85);
+}
+
+.context-menu--dark .context-menu-item:hover:not(:disabled) {
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+}
+
+.context-menu--light .context-menu-item:hover:not(:disabled) {
+  background: rgba(59, 130, 246, 0.1);
+  color: #2563eb;
+}
+
+.context-menu--dark .context-menu-item:active:not(:disabled) {
+  background: rgba(59, 130, 246, 0.25);
+}
+
+.context-menu--light .context-menu-item:active:not(:disabled) {
+  background: rgba(59, 130, 246, 0.15);
 }
 
 .context-menu-item:disabled {
@@ -77,23 +123,66 @@
 }
 
 .context-menu-item.cancel {
-  color: #999;
   margin-top: 4px;
 }
 
-.context-menu-item.cancel:hover {
-  background: rgba(0, 0, 0, 0.05);
-  color: #666;
+.context-menu--dark .context-menu-item.cancel {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.context-menu--light .context-menu-item.cancel {
+  color: rgba(0, 0, 0, 0.45);
+}
+
+.context-menu--dark .context-menu-item.cancel:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.context-menu--light .context-menu-item.cancel:hover {
+  background: rgba(0, 0, 0, 0.04);
+  color: rgba(0, 0, 0, 0.6);
+}
+
+.context-menu-item.remove {
+  margin-top: 4px;
+}
+
+.context-menu--dark .context-menu-item.remove {
+  color: #f87171;
+}
+
+.context-menu--light .context-menu-item.remove {
+  color: #dc2626;
+}
+
+.context-menu--dark .context-menu-item.remove:hover {
+  background: rgba(248, 113, 113, 0.15);
+  color: #fca5a5;
+}
+
+.context-menu--light .context-menu-item.remove:hover {
+  background: rgba(220, 38, 38, 0.1);
+  color: #ef4444;
 }
 
 .context-menu-icon {
   font-size: 18px;
   width: 24px;
   text-align: center;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.context-menu--dark .context-menu-icon {
+  opacity: 0.9;
+}
+
+.context-menu--light .context-menu-icon {
+  opacity: 0.8;
 }
 
 /* Animación de hover */
 .context-menu-item:not(:disabled):hover .context-menu-icon {
   transform: scale(1.1);
-  transition: transform 0.2s ease;
+  opacity: 1;
 }

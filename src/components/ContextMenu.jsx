@@ -9,6 +9,7 @@ const ContextMenu = ({
   onClose,
   onSelectComponent,
   onDeleteObject,
+  isDarkMode = true,
 }) => {
   if (!position) return null;
 
@@ -52,7 +53,9 @@ const ContextMenu = ({
 
       {/* Menú */}
       <div
-        className="context-menu"
+        className={`context-menu ${
+          isDarkMode ? "context-menu--dark" : "context-menu--light"
+        }`}
         style={{
           left: `${position.x}px`,
           top: `${position.y}px`,

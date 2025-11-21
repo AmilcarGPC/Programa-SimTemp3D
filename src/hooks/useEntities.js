@@ -1,4 +1,8 @@
 import { useState, useRef, useCallback, useEffect } from "react";
+import {
+  validateCandidateWithMessage,
+  buildOthers,
+} from "../utils/entityCollision";
 
 /*
   useEntities: Hook genérico para manejar entidades basadas en EntityBase.
@@ -33,6 +37,7 @@ export const useEntities = (scene, options = {}) => {
     beforeCreate,
     getWorld,
     initialState = [],
+    showAlert, // New: callback for showing alerts
   } = options;
 
   const [items, setItems] = useState(initialState);
@@ -91,9 +96,7 @@ export const useEntities = (scene, options = {}) => {
         obj.toggle();
         // Sync state after toggle
         setItems((prev) =>
-          prev.map((item) =>
-            item.id === id ? toStateInfo(obj) : item
-          )
+          prev.map((item) => (item.id === id ? toStateInfo(obj) : item))
         );
       }
     },
@@ -112,7 +115,7 @@ export const useEntities = (scene, options = {}) => {
         try {
           console.log("UIPS", id, pos, prevBase);
           obj.onMove(prevBase, pos);
-        } catch (e) { }
+        } catch (e) {}
       } else if (typeof positionMapper === "function") {
         positionMapper(pos, obj);
       } else {
@@ -155,7 +158,10 @@ export const useEntities = (scene, options = {}) => {
       if (typeof obj.validatePosition === "function") {
         try {
           const localOk = obj.validatePosition(null, snapped);
-          if (!localOk) return false;
+          if (!localOk) {
+            // Don't show alert on preview, only on commit
+            return false;
+          }
         } catch (e) {
           // On validator error, block preview
           return false;
@@ -165,10 +171,10 @@ export const useEntities = (scene, options = {}) => {
       const ok =
         typeof obj.moveTo === "function"
           ? obj.moveTo(newBasePos, {
-            validate: false,
-            snap: true,
-            instant: true,
-          })
+              validate: false,
+              snap: true,
+              instant: true,
+            })
           : false;
       if (ok) {
         const p =
@@ -191,12 +197,72 @@ export const useEntities = (scene, options = {}) => {
         );
       if (!obj) return false;
 
-      // build candidate for external checks
+      // Check local validation first (wall bounds, grid limits, etc.)
+      const snapped = {
+        x: Math.round(finalBasePos.x),
+        z: Math.round(finalBasePos.z),
+      };
+
+      if (typeof obj.validatePosition === "function") {
+        try {
+          const localOk = obj.validatePosition(null, snapped);
+          if (!localOk) {
+            if (typeof obj.revertPosition === "function") obj.revertPosition();
+            if (showAlert) {
+              const typeNames = {
+                door: "puerta",
+                window: "ventana",
+                heater: "calefactor",
+                aircon: "aire acondicionado",
+                ac: "aire acondicionado",
+              };
+              const entityName = typeNames[type] || "entidad";
+
+              // Check if it's a wall-mounted entity
+              if (
+                type === "door" ||
+                type === "window" ||
+                type === "aircon" ||
+                type === "ac"
+              ) {
+                showAlert(
+                  "warning",
+                  `La ${entityName} debe estar sobre un muro válido`
+                );
+              } else {
+                showAlert(
+                  "warning",
+                  "Posición fuera de los límites del espacio interior"
+                );
+              }
+            }
+            return false;
+          }
+        } catch (e) {
+          if (typeof obj.revertPosition === "function") obj.revertPosition();
+          return false;
+        }
+      }
+
+      // build candidate for external checks (overlaps with other entities)
       const candidate = {
         id,
         position: finalBasePos,
         direction: obj.userData?.direction,
+        type: obj.userData?.type || type,
       };
+
+      // Check for overlaps with other entities
+      const others = buildOthers(world, id);
+      const validation = validateCandidateWithMessage(candidate, others);
+
+      if (!validation.valid) {
+        if (typeof obj.revertPosition === "function") obj.revertPosition();
+        if (showAlert && validation.message) {
+          showAlert("error", validation.message);
+        }
+        return false;
+      }
 
       if (typeof extraCommitValidation === "function") {
         const okCustom = extraCommitValidation(candidate, world, {
@@ -205,6 +271,9 @@ export const useEntities = (scene, options = {}) => {
         });
         if (!okCustom) {
           if (typeof obj.revertPosition === "function") obj.revertPosition();
+          if (showAlert) {
+            showAlert("error", "No se puede colocar en esta posición");
+          }
           return false;
         }
       }
@@ -227,7 +296,7 @@ export const useEntities = (scene, options = {}) => {
       if (typeof obj.revertPosition === "function") obj.revertPosition();
       return false;
     },
-    [scene, type, extraCommitValidation, updateItemPositionInState]
+    [scene, type, extraCommitValidation, updateItemPositionInState, showAlert]
   );
 
   const clearAllItems = useCallback(() => {

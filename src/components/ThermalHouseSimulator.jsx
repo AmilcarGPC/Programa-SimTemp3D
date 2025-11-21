@@ -3,7 +3,10 @@ import * as THREE from "three";
 import Canvas3D from "./Canvas3D";
 import ControlPanel from "./ControlPanel";
 import MetricsBar from "./MetricsBar";
+import ProjectHeader from "./ProjectHeader";
 import ContextMenu from "./ContextMenu";
+import AlertNotification from "./AlertNotification";
+import Tutorial from "./Tutorial";
 import { useThreeScene } from "../hooks/useThreeScene";
 import { useLighting } from "../hooks/useLighting";
 import { usePostProcessing } from "../hooks/usePostProcessing";
@@ -63,6 +66,37 @@ const ThermalHouseSimulator = () => {
   const gridRef = useRef(null);
   const particlesViewRef = useRef(null);
   const [avgInternalTemp, setAvgInternalTemp] = useState(null);
+  const [isDarkMode, setIsDarkMode] = useState(true); // Theme toggle state
+  const [alerts, setAlerts] = useState([]);
+  const lastAlertRef = useRef({ message: "", time: 0 });
+  const [showTutorial, setShowTutorial] = useState(false);
+
+  // Check if tutorial should be shown on first load
+  useEffect(() => {
+    const tutorialCompleted = localStorage.getItem("tutorial-completed");
+    if (!tutorialCompleted) {
+      setShowTutorial(true);
+    }
+  }, []);
+
+  // Alert system helper - prevents duplicate alerts within 1 second
+  const showAlert = React.useCallback((type, message, duration = 3000) => {
+    const now = Date.now();
+    const lastAlert = lastAlertRef.current;
+
+    // Skip if same message within 1 second
+    if (lastAlert.message === message && now - lastAlert.time < 1000) {
+      return;
+    }
+
+    lastAlertRef.current = { message, time: now };
+    const id = now + Math.random();
+    setAlerts((prev) => [...prev, { id, type, message, duration }]);
+  }, []);
+
+  const removeAlert = React.useCallback((id) => {
+    setAlerts((prev) => prev.filter((alert) => alert.id !== id));
+  }, []);
 
   // Hooks personalizados para gestionar la escena 3D
   const { scene, camera, renderer } = useThreeScene(containerRef);
@@ -88,6 +122,7 @@ const ThermalHouseSimulator = () => {
     type: "door",
     createEntity: ({ position, direction, id } = {}) =>
       Door({ position, direction, id }),
+    showAlert,
   });
 
   // Windows
@@ -105,6 +140,7 @@ const ThermalHouseSimulator = () => {
     type: "window",
     createEntity: ({ position, direction, id } = {}) =>
       Window({ position, direction, id }),
+    showAlert,
   });
 
   // Hook para gestionar calefactores (usando useEntities genérico)
@@ -119,6 +155,7 @@ const ThermalHouseSimulator = () => {
   } = useEntities(scene, {
     type: "heater",
     createEntity: ({ position, id } = {}) => Heater({ position, id }),
+    showAlert,
   });
 
   // Hook para gestionar aires acondicionados (wall-mounted)
@@ -135,6 +172,7 @@ const ThermalHouseSimulator = () => {
     type: "aircon",
     createEntity: ({ position, direction, id } = {}) =>
       AirConditioner({ position, direction, id }),
+    showAlert,
   });
 
   // Callback de animación para actualizar simulación
@@ -935,6 +973,7 @@ const ThermalHouseSimulator = () => {
         console.warn(
           "No se puede añadir la puerta: conflicto con otra entidad"
         );
+        showAlert("error", "No se puede añadir la puerta: posición ocupada");
         return;
       }
       const door = addDoor({
@@ -959,6 +998,7 @@ const ThermalHouseSimulator = () => {
         console.warn(
           "No se puede añadir la ventana: conflicto con otra entidad"
         );
+        showAlert("error", "No se puede añadir la ventana: posición ocupada");
         return;
       }
       console.log("WWI", contextMenu.wallPosition, contextMenu.direction);
@@ -984,6 +1024,10 @@ const ThermalHouseSimulator = () => {
         console.warn(
           "No se puede añadir el calefactor: conflicto con otra entidad"
         );
+        showAlert(
+          "error",
+          "No se puede añadir el calefactor: posición ocupada"
+        );
         return;
       }
       const heater = addHeater({
@@ -1004,6 +1048,10 @@ const ThermalHouseSimulator = () => {
       if (!validateCandidate(candidateFull, others)) {
         console.warn(
           "No se puede añadir el aire acondicionado: conflicto con otra entidad"
+        );
+        showAlert(
+          "error",
+          "No se puede añadir el aire acondicionado: posición ocupada"
         );
         return;
       }
@@ -1080,6 +1128,8 @@ const ThermalHouseSimulator = () => {
     >
       <Canvas3D ref={containerRef} />
 
+      <ProjectHeader isDarkMode={isDarkMode} />
+
       <ControlPanel
         tempExterna={tempExterna}
         tempInterna={tempInterna}
@@ -1091,6 +1141,9 @@ const ThermalHouseSimulator = () => {
         onGridDensityChange={setGridDensity}
         simulationSpeed={simulationSpeed}
         onSimulationSpeedChange={setSimulationSpeed}
+        isDarkMode={isDarkMode}
+        onToggleTheme={() => setIsDarkMode(!isDarkMode)}
+        onOpenTutorial={() => setShowTutorial(true)}
         onReset={() => {
           setTempExterna(UI_CONFIG.temperature.external.default);
           setTempInterna(UI_CONFIG.temperature.internal.default);
@@ -1117,14 +1170,49 @@ const ThermalHouseSimulator = () => {
         }}
       />
 
-      <MetricsBar avgInternal={avgInternalTemp} />
+      <MetricsBar avgInternal={avgInternalTemp} isDarkMode={isDarkMode} />
 
       <ContextMenu
         position={contextMenu}
         onClose={() => setContextMenu(null)}
         onSelectComponent={handleSelectComponent}
         onDeleteObject={handleDeleteObject}
+        isDarkMode={isDarkMode}
       />
+
+      {/* Alert notifications */}
+      <div
+        style={{
+          position: "fixed",
+          top: "80px",
+          right: "24px",
+          zIndex: 10000,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "flex-end",
+          pointerEvents: "none",
+        }}
+      >
+        {alerts.map((alert) => (
+          <div key={alert.id} style={{ pointerEvents: "auto" }}>
+            <AlertNotification
+              type={alert.type}
+              message={alert.message}
+              duration={alert.duration}
+              onClose={() => removeAlert(alert.id)}
+              isDarkMode={isDarkMode}
+            />
+          </div>
+        ))}
+      </div>
+
+      {/* Tutorial */}
+      {showTutorial && (
+        <Tutorial
+          isDarkMode={isDarkMode}
+          onClose={() => setShowTutorial(false)}
+        />
+      )}
     </div>
   );
 };

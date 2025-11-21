@@ -141,6 +141,32 @@ export const validateCandidate = (candidate, others = []) => {
   return true;
 };
 
+// Enhanced validation that returns detailed error message
+export const validateCandidateWithMessage = (candidate, others = []) => {
+  for (let i = 0; i < others.length; i++) {
+    const other = others[i];
+    if (overlaps(candidate, other)) {
+      const candidateType = candidate.type || "entidad";
+      const otherType = other.type || "entidad";
+      const typeNames = {
+        door: "puerta",
+        window: "ventana",
+        heater: "calefactor",
+        aircon: "aire acondicionado",
+        ac: "aire acondicionado",
+      };
+      const candidateName = typeNames[candidateType] || candidateType;
+      const otherName = typeNames[otherType] || otherType;
+
+      return {
+        valid: false,
+        message: `No se puede colocar: solapamiento con ${otherName}`,
+      };
+    }
+  }
+  return { valid: true, message: null };
+};
+
 // Build a flat array of other entities from a `world` descriptor (array or object with arrays)
 export const buildOthers = (world = {}, selfId = null) => {
   if (!world) return [];
@@ -162,6 +188,7 @@ export default {
   getMeta,
   overlaps,
   validateCandidate,
+  validateCandidateWithMessage,
   isInFront,
   buildOthers,
 };

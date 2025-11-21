@@ -16,16 +16,34 @@ const ControlPanel = ({
   onGridDensityChange,
   simulationSpeed,
   onSimulationSpeedChange,
+  isDarkMode,
+  onToggleTheme,
   onReset,
+  onOpenTutorial,
 }) => {
   const { external, internal } = UI_CONFIG.temperature;
 
   return (
-    <div className="control-panel">
-      <h2 className="control-panel__title">Control Térmico</h2>
+    <div
+      id="control-panel"
+      className={`control-panel ${
+        isDarkMode ? "control-panel--dark" : "control-panel--light"
+      }`}
+    >
+      <div className="control-panel__header">
+        <h2 className="control-panel__title">Control Térmico</h2>
+        <button
+          id="theme-toggle"
+          className="control-panel__theme-toggle"
+          onClick={onToggleTheme}
+          title={isDarkMode ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}
+        >
+          {isDarkMode ? "☀️" : "🌙"}
+        </button>
+      </div>
 
       {/* Control de temperatura externa */}
-      <div className="control-panel__control-group">
+      <div id="temperatures" className="control-panel__control-group">
         <label className="control-panel__label">
           Temperatura Externa: {tempExterna}°C
         </label>
@@ -55,7 +73,7 @@ const ControlPanel = ({
       </div>
 
       {/* Visualización */}
-      <div className="control-panel__control-group">
+      <div id="grid-controls" className="control-panel__control-group">
         <label className="control-panel__label checkbox-label">
           <input
             type="checkbox"
@@ -104,6 +122,7 @@ const ControlPanel = ({
       {/* Botones de acción */}
       <div className="control-panel__actions">
         <button
+          id="reset-button"
           className="control-panel__button control-panel__button--reset"
           onClick={() => {
             if (onReset) {
@@ -116,6 +135,16 @@ const ControlPanel = ({
         >
           Reiniciar
         </button>
+
+        {onOpenTutorial && (
+          <button
+            className="control-panel__button control-panel__button--tutorial"
+            onClick={onOpenTutorial}
+            title="Abrir tutorial interactivo"
+          >
+            Tutorial
+          </button>
+        )}
       </div>
 
       {/* Panel de información (eliminada la línea 'Día 1') */}

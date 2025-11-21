@@ -12,7 +12,7 @@ const toHsl = (t, min = -10, max = 45) => {
   return `hsl(${h * 360}deg 100% 50%)`;
 };
 
-const MetricsBar = ({ avgInternal = null }) => {
+const MetricsBar = ({ avgInternal = null, isDarkMode = true }) => {
   const min = -10;
   const max = 45;
   const mid = (min + max) / 2;
@@ -27,7 +27,12 @@ const MetricsBar = ({ avgInternal = null }) => {
   ];
 
   return (
-    <div className="metrics-bar metrics-bar--legend">
+    <div
+      id="metrics-bar"
+      className={`metrics-bar metrics-bar--legend ${
+        isDarkMode ? "metrics-bar--dark" : "metrics-bar--light"
+      }`}
+    >
       <div className="metrics-bar__legend">
         <div style={{ display: "flex", gap: 12 }}>
           {legendItems.map((it) => (
@@ -41,11 +46,13 @@ const MetricsBar = ({ avgInternal = null }) => {
                   height: 12,
                   background: toHsl(it.t),
                   borderRadius: 2,
-                  border: "1px solid rgba(0,0,0,0.2)",
+                  border: isDarkMode
+                    ? "1px solid rgba(0,0,0,0.2)"
+                    : "1px solid rgba(0,0,0,0.15)",
                 }}
               />
               <div
-                style={{ fontSize: 12, color: "#fff" }}
+                style={{ fontSize: 12, color: isDarkMode ? "#fff" : "#1a1a2e" }}
               >{`${it.label} — ${it.t}°C`}</div>
             </div>
           ))}

@@ -88,7 +88,7 @@ export const TREE_POSITIONS = [
   { x: -4, z: -6.5, scale: 0.6 },
 
   // Top-right corner cluster (closer to house corner at +5,-5)
-  { x: 6.3, z: -3.7, scale: 0.5 },
+  { x: 6.3, z: -3.7, scale: 0.4 },
   { x: 7, z: -4.8, scale: 0.9 },
 
   // Bottom-left corner cluster (closer to house corner at -5,+5)
@@ -97,7 +97,7 @@ export const TREE_POSITIONS = [
 
   // Bottom-right corner cluster (closer to house corner at +5,+5) - smaller trees
   { x: 4.5, z: 6.3, scale: 0.5 },
-  { x: 6.5, z: 6.5, scale: 0.73 },
+  { x: 6.5, z: 6.5, scale: 0.67 },
 ];
 
 export const MATERIALS_CONFIG = {
@@ -140,13 +140,15 @@ export const N8AO_CONFIG = {
 
 export const UI_CONFIG = {
   sidePanel: {
-    width: 280,
-    backgroundColor: "rgba(255, 255, 255, 0.95)",
-    padding: 20,
+    width: 320,
+    backgroundColor:
+      "linear-gradient(135deg, rgba(20, 20, 30, 0.95) 0%, rgba(30, 30, 40, 0.92) 100%)",
+    padding: 24,
   },
   footer: {
-    height: 50,
-    backgroundColor: "rgba(33, 33, 33, 0.95)",
+    height: 60,
+    backgroundColor:
+      "linear-gradient(180deg, rgba(15, 15, 20, 0.95) 0%, rgba(20, 20, 28, 0.98) 100%)",
   },
   temperature: {
     external: { min: -10, max: 45, default: 45 },
