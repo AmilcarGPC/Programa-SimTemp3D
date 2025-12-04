@@ -2,55 +2,56 @@ import * as THREE from "three";
 import { SUBTRACTION, Brush, Evaluator } from "three-bvh-csg";
 import { HOUSE_CONFIG } from "../config/sceneConfig";
 import { WINDOW_CONFIG } from "../config/entityConfig";
+import { EntityBase } from "./EntityBase";
 import {
   WINDOW_DIRECTIONS,
   isOnWall,
   getWindowRotation,
-  snapToGrid,
   updateWindowPosition,
 } from "../utils/entityUtils";
-import { EntityBase } from "./EntityBase";
 import { validateCandidate, buildOthers } from "../utils/entityCollision";
 
-/**
- * Crea el marco de la ventana
- */
 const WindowFrame = () => {
-  const { width, height, depth, frameThickness } = WINDOW_CONFIG;
-
   const frameGroup = new THREE.Group();
+  const { width, height, depth, frameThickness } = WINDOW_CONFIG;
+  const protrusion = 0.02;
 
-  const frameMat = new THREE.MeshStandardMaterial({
+  const frameMaterial = new THREE.MeshStandardMaterial({
     color: 0xffffff,
     roughness: 0.6,
     metalness: 0.0,
   });
 
-  const vertical = new THREE.BoxGeometry(frameThickness, height, depth + 0.02);
-  const horizontal = new THREE.BoxGeometry(width, frameThickness, depth + 0.02);
+  const verticalGeom = new THREE.BoxGeometry(
+    frameThickness,
+    height,
+    depth + protrusion
+  );
+  const horizontalGeom = new THREE.BoxGeometry(
+    width,
+    frameThickness,
+    depth + protrusion
+  );
 
-  const left = new THREE.Mesh(vertical, frameMat);
-  left.position.set(-width / 2 + frameThickness / 2, height / 2, 0);
-  left.receiveShadow = true;
+  const leftFrame = new THREE.Mesh(verticalGeom, frameMaterial);
+  leftFrame.position.set(-width / 2 + frameThickness / 2, height / 2, 0);
+  leftFrame.receiveShadow = true;
 
-  const right = new THREE.Mesh(vertical, frameMat);
-  right.position.set(width / 2 - frameThickness / 2, height / 2, 0);
-  right.receiveShadow = true;
+  const rightFrame = new THREE.Mesh(verticalGeom, frameMaterial);
+  rightFrame.position.set(width / 2 - frameThickness / 2, height / 2, 0);
+  rightFrame.receiveShadow = true;
 
-  const top = new THREE.Mesh(horizontal, frameMat);
-  top.position.set(0, height - frameThickness / 2, 0);
-  top.receiveShadow = true;
-  const bottom = new THREE.Mesh(horizontal, frameMat);
-  bottom.position.set(0, frameThickness / 2, 0);
-  bottom.receiveShadow = true;
+  const topFrame = new THREE.Mesh(horizontalGeom, frameMaterial);
+  topFrame.position.set(0, height - frameThickness / 2, 0);
+  topFrame.receiveShadow = true;
+  const bottomFrame = new THREE.Mesh(horizontalGeom, frameMaterial);
+  bottomFrame.position.set(0, frameThickness / 2, 0);
+  bottomFrame.receiveShadow = true;
 
-  frameGroup.add(left, right, top, bottom);
+  frameGroup.add(leftFrame, rightFrame, topFrame, bottomFrame);
   return frameGroup;
 };
 
-/**
- * Crea la rejilla (muntins) para dividir el vidrio en panesColumns x panesRows
- */
 const WindowGrid = () => {
   const {
     width,
@@ -72,7 +73,6 @@ const WindowGrid = () => {
     metalness: 0,
   });
 
-  // Vertical bars
   if (panesColumns && panesColumns > 1) {
     const cellWidth = innerWidth / panesColumns;
     for (let i = 1; i < panesColumns; i++) {
@@ -85,7 +85,6 @@ const WindowGrid = () => {
     }
   }
 
-  // Horizontal bars
   if (panesRows && panesRows > 1) {
     const cellHeight = innerHeight / panesRows;
     for (let j = 1; j < panesRows; j++) {
@@ -101,29 +100,6 @@ const WindowGrid = () => {
   return gridGroup;
 };
 
-/**
- * Crea el cristal/hoja de la ventana
- */
-const WindowGlass = () => {
-  const { width, height, glassThickness } = WINDOW_CONFIG;
-
-  const glassMat = new THREE.MeshPhysicalMaterial({
-    color: 0xffffff,
-    metalness: 0,
-    roughness: 0,
-    transmission: 0.9,
-    transparent: true,
-    opacity: 0.9,
-  });
-  const glass = new THREE.Mesh(
-    new THREE.BoxGeometry(width * 0.9, height * 0.9, glassThickness),
-    glassMat
-  );
-  glass.position.y = (height * 0.9) / 2;
-  glass.receiveShadow = false;
-  return glass;
-};
-
 const WindowCutout = () => {
   const { width, height, depth } = WINDOW_CONFIG;
   const geom = new THREE.BoxGeometry(
@@ -137,21 +113,18 @@ const WindowCutout = () => {
   return brush;
 };
 
-/**
- * Clase WindowEntity que encapsula una ventana con persiana y luz interior.
- */
 class WindowEntity extends EntityBase {
   constructor({ position, direction, id } = {}) {
-    super({ type: "window", id: id, position: position });
+    super({ type: "window", id, position });
     this.userData.direction = direction;
-    // canonical state flag
     this.userData.isActive = false;
     this.userData.targetAngle = 0;
     this.userData.currentAngle = 0;
 
-    const { width, height, frameThickness, glassThickness } = WINDOW_CONFIG;
     const frame = WindowFrame();
     const grid = WindowGrid();
+
+    const { width, height, frameThickness, glassThickness } = WINDOW_CONFIG;
 
     const shutterGroup = new THREE.Group();
     const innerWidth = width * 0.9;
@@ -199,17 +172,18 @@ class WindowEntity extends EntityBase {
       this.position.y = WINDOW_CONFIG.sillHeight;
     }
 
+    const inset = HOUSE_CONFIG.wallThickness / 2;
     if (this.userData.direction === WINDOW_DIRECTIONS.NORTH) {
-      this.position.z += HOUSE_CONFIG.wallThickness / 2;
+      this.position.z += inset;
     } else if (this.userData.direction === WINDOW_DIRECTIONS.SOUTH) {
-      this.position.z -= HOUSE_CONFIG.wallThickness / 2;
+      this.position.z -= inset;
     } else if (this.userData.direction === WINDOW_DIRECTIONS.EAST) {
-      this.position.x -= HOUSE_CONFIG.wallThickness / 2;
+      this.position.x -= inset;
     } else if (this.userData.direction === WINDOW_DIRECTIONS.WEST) {
-      this.position.x += HOUSE_CONFIG.wallThickness / 2;
+      this.position.x += inset;
     }
 
-    this.rotation.y = getWindowRotation(this.userData.direction);
+    this.rotation.y = getWindowRotation(direction);
 
     this.onToggle = (instant = false) => {
       const isOpen = !!this.userData.isActive;
@@ -218,7 +192,6 @@ class WindowEntity extends EntityBase {
         : this.userData.shutterClosedY;
       this.userData.shutterTargetY = targetY;
       this.userData.lightTarget = isOpen ? 2.5 : 0.0;
-      // Apply instantly: update shutter position and light immediately
       this.userData.shutterCurrentY = targetY;
       if (this.userData.shutterGroup)
         this.userData.shutterGroup.children.forEach((c) => {
@@ -268,7 +241,6 @@ class WindowEntity extends EntityBase {
     };
   }
 
-  // Validación local de posición (grid). Devuelve true si la posición es válida.
   validatePosition(world = null, basePos = null) {
     const pos = basePos ||
       this.userData.basePosition || { x: this.position.x, z: this.position.z };
@@ -299,18 +271,14 @@ class WindowEntity extends EntityBase {
     }
   }
 
-  // Ajustes al mover: delegar al helper para aplicar offsets (sillHeight, wallThickness)
   onMove(oldBase, newBase, opts = {}) {
     try {
       updateWindowPosition(this, { x: newBase.x, z: newBase.z });
-    } catch (e) {
-      // ignore
-    }
+    } catch (e) {}
   }
 }
 
 export const Window = ({ position, direction, id } = {}) => {
-  console.log("CW", position, direction);
   if (!isOnWall({ ...position, direction })) {
     console.warn("Invalid window position:", position, direction);
     return null;
@@ -318,34 +286,36 @@ export const Window = ({ position, direction, id } = {}) => {
   return new WindowEntity({ position, direction, id });
 };
 
-// WindowEntity and factory created earlier; Window factory returns WindowEntity instance
 export const applyWindowCutouts = (wallsMesh, windowPositions) => {
   if (!windowPositions || windowPositions.length === 0) return wallsMesh;
+
   const evaluator = new Evaluator();
   let result = wallsMesh;
+
   windowPositions.forEach((win) => {
     const cutout = WindowCutout();
     const halfDepth = WINDOW_CONFIG.depth / 2;
-    let cx = win.position.x;
-    let cz = win.position.z;
+    let cutX = win.position.x;
+    let cutZ = win.position.z;
+
     switch (win.direction) {
       case WINDOW_DIRECTIONS.NORTH:
-        cz = win.position.z + halfDepth;
+        cutZ = win.position.z + halfDepth;
         break;
       case WINDOW_DIRECTIONS.SOUTH:
-        cz = win.position.z - halfDepth;
+        cutZ = win.position.z - halfDepth;
         break;
       case WINDOW_DIRECTIONS.EAST:
-        cx = win.position.x - halfDepth;
+        cutX = win.position.x - halfDepth;
         break;
       case WINDOW_DIRECTIONS.WEST:
-        cx = win.position.x + halfDepth;
+        cutX = win.position.x + halfDepth;
         break;
       default:
         break;
     }
-    cutout.position.x = cx;
-    cutout.position.z = cz;
+    cutout.position.x = cutX;
+    cutout.position.z = cutZ;
     cutout.rotation.y = getWindowRotation(win.direction);
     cutout.updateMatrixWorld();
 
@@ -374,16 +344,16 @@ export const applyWindowCutouts = (wallsMesh, windowPositions) => {
   return result;
 };
 
-export const updateWindowAnimation = (windowGroup) => {
-  if (!windowGroup?.userData) return;
-  if (typeof windowGroup.updateAnimation === "function") {
-    windowGroup.updateAnimation();
-  }
-};
-
 export const toggleWindow = (windowGroup, instant = false) => {
   if (!windowGroup?.userData) return;
   if (typeof windowGroup.toggle === "function") {
     windowGroup.toggle(instant);
+  }
+};
+
+export const updateWindowAnimation = (windowGroup) => {
+  if (!windowGroup?.userData) return;
+  if (typeof windowGroup.updateAnimation === "function") {
+    windowGroup.updateAnimation();
   }
 };

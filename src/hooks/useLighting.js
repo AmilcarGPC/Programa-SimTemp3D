@@ -2,17 +2,13 @@ import { useEffect } from "react";
 import * as THREE from "three";
 import { LIGHTING_CONFIG, HOUSE_CONFIG } from "../config/sceneConfig";
 
-/**
- * Hook para configurar toda la iluminación de la escena
- * @param {THREE.Scene} scene - La escena donde añadir las luces
- */
 export const useLighting = (scene) => {
   useEffect(() => {
     if (!scene) return;
 
     const lights = [];
 
-    // 1. Luz hemisférica - Simula iluminación de cielo/suelo
+    // Simula iluminación de cielo/suelo
     const hemisphereLight = new THREE.HemisphereLight(
       LIGHTING_CONFIG.hemisphere.skyColor,
       LIGHTING_CONFIG.hemisphere.groundColor,
@@ -21,7 +17,7 @@ export const useLighting = (scene) => {
     lights.push(hemisphereLight);
     scene.add(hemisphereLight);
 
-    // 2. Luz del sol - Luz direccional principal
+    // Luz direccional principal
     const sunLight = new THREE.DirectionalLight(
       LIGHTING_CONFIG.sun.color,
       LIGHTING_CONFIG.sun.intensity
@@ -32,7 +28,6 @@ export const useLighting = (scene) => {
       LIGHTING_CONFIG.sun.position.z
     );
 
-    // Configurar sombras
     sunLight.castShadow = true;
     sunLight.shadow.mapSize.width = LIGHTING_CONFIG.sun.shadow.mapSize;
     sunLight.shadow.mapSize.height = LIGHTING_CONFIG.sun.shadow.mapSize;
@@ -48,7 +43,7 @@ export const useLighting = (scene) => {
     lights.push(sunLight);
     scene.add(sunLight);
 
-    // 3. Luz ambiental - Fill light general
+    // Luz ambiental
     const ambientLight = new THREE.AmbientLight(
       LIGHTING_CONFIG.ambient.color,
       LIGHTING_CONFIG.ambient.intensity
@@ -56,7 +51,7 @@ export const useLighting = (scene) => {
     lights.push(ambientLight);
     scene.add(ambientLight);
 
-    // 4. Luz de relleno interior - Para iluminar dentro de la casa
+    // Luz de relleno interior
     const fillLight = new THREE.PointLight(
       LIGHTING_CONFIG.fill.color,
       LIGHTING_CONFIG.fill.intensity,
@@ -67,7 +62,7 @@ export const useLighting = (scene) => {
     lights.push(fillLight);
     scene.add(fillLight);
 
-    // 5. Luces direccionales para iluminar paredes externas sin afectar interior
+    // Luces direccionales para iluminar paredes externas sin afectar interior
     const exteriorTargets = [];
     if (LIGHTING_CONFIG.exterior) {
       LIGHTING_CONFIG.exterior.positions.forEach((pos) => {
@@ -85,19 +80,15 @@ export const useLighting = (scene) => {
       });
     }
 
-    // Cleanup
     return () => {
       lights.forEach((light) => {
         scene.remove(light);
         light.dispose?.();
       });
-      // eliminar targets añadidos explícitamente
       exteriorTargets.forEach((t) => {
         try {
           scene.remove(t);
-        } catch (e) {
-          // ignore
-        }
+        } catch (e) {}
       });
     };
   }, [scene]);

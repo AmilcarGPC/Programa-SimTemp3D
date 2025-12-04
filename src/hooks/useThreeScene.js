@@ -6,11 +6,6 @@ import {
   RENDERER_CONFIG,
 } from "../config/sceneConfig";
 
-/**
- * Hook para inicializar y gestionar la escena Three.js básica
- * @param {React.RefObject} containerRef - Referencia al contenedor DOM
- * @returns {Object} { scene, camera, renderer, composer }
- */
 export const useThreeScene = (containerRef) => {
   const [scene, setScene] = useState(null);
   const [camera, setCamera] = useState(null);
@@ -75,7 +70,6 @@ export const useThreeScene = (containerRef) => {
 
     containerRef.current.appendChild(newRenderer.domElement);
 
-    // Cleanup
     return () => {
       if (containerRef.current && newRenderer.domElement) {
         containerRef.current.removeChild(newRenderer.domElement);

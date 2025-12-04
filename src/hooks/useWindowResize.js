@@ -1,12 +1,5 @@
 import { useEffect } from "react";
 
-/**
- * Hook para manejar el resize de la ventana
- * @param {THREE.Camera} camera - La cámara a actualizar
- * @param {THREE.WebGLRenderer} renderer - El renderer a redimensionar
- * @param {EffectComposer} composer - El composer de post-procesamiento
- * @param {React.RefObject} containerRef - Referencia al contenedor
- */
 export const useWindowResize = (camera, renderer, composer, containerRef) => {
   useEffect(() => {
     if (!camera || !renderer || !containerRef.current) return;

@@ -12,7 +12,6 @@ import { useLighting } from "../hooks/useLighting";
 import { usePostProcessing } from "../hooks/usePostProcessing";
 import { useWindowResize } from "../hooks/useWindowResize";
 import { useAnimationLoop } from "../hooks/useAnimationLoop";
-import { useThermalEffects } from "../hooks/useThermalEffects";
 import useEntities from "../hooks/useEntities";
 import { createGround } from "../utils/createGround";
 import { createTrees } from "../utils/createTree";
@@ -35,11 +34,8 @@ import {
 } from "../utils/entityUtils";
 
 import { disposeObject } from "../utils/disposeUtils";
-import { WINDOW_CONFIG, DOOR_CONFIG } from "../config/entityConfig";
 import { TREE_POSITIONS, UI_CONFIG, HOUSE_CONFIG } from "../config/sceneConfig";
 import { validateCandidate } from "../utils/entityCollision";
-// `isOnWall` and positioning helpers imported above from entityUtils
-import { Brush, Evaluator, SUBTRACTION } from "three-bvh-csg";
 
 const ThermalHouseSimulator = () => {
   const containerRef = useRef(null);
@@ -50,7 +46,6 @@ const ThermalHouseSimulator = () => {
     UI_CONFIG.temperature.internal.default
   );
 
-  // Force update state from config if defaults change (dev helper)
   useEffect(() => {
     setTempExterna(UI_CONFIG.temperature.external.default);
     setTempInterna(UI_CONFIG.temperature.internal.default);
@@ -61,17 +56,17 @@ const ThermalHouseSimulator = () => {
   const dragStartPos = useRef(null);
 
   const [showGrid, setShowGrid] = useState(false);
-  const [gridDensity, setGridDensity] = useState(2); // Default 2x2 per unit
-  const [simulationSpeed, setSimulationSpeed] = useState(10); // Default 10x speed
+  const [gridDensity, setGridDensity] = useState(2);
+  const [simulationSpeed, setSimulationSpeed] = useState(10);
   const gridRef = useRef(null);
   const particlesViewRef = useRef(null);
   const [avgInternalTemp, setAvgInternalTemp] = useState(null);
-  const [isDarkMode, setIsDarkMode] = useState(true); // Theme toggle state
+  const [isDarkMode, setIsDarkMode] = useState(true);
   const [alerts, setAlerts] = useState([]);
   const lastAlertRef = useRef({ message: "", time: 0 });
   const [showTutorial, setShowTutorial] = useState(false);
 
-  // Check if tutorial should be shown on first load
+  // Verificar si se debe mostrar el tutorial al cargar
   useEffect(() => {
     const tutorialCompleted = localStorage.getItem("tutorial-completed");
     if (!tutorialCompleted) {
@@ -233,9 +228,6 @@ const ThermalHouseSimulator = () => {
   );
 
   const fps = useAnimationLoop(composer, handleFrame);
-
-  // Hook para efectos visuales térmicos - REMOVED as per user request
-  // useThermalEffects(scene, tempExterna, tempInterna);
 
   // Inicializar Grid y Partículas
   useEffect(() => {
@@ -970,7 +962,8 @@ const ThermalHouseSimulator = () => {
         position: contextMenu.wallPosition,
         direction: contextMenu.direction,
       };
-      const others = [...windows, ...heaters, ...acs];
+      // Include doors in the check to prevent overlapping with other doors
+      const others = [...doors, ...windows, ...heaters, ...acs];
       if (!validateCandidate(candidateFull, others)) {
         console.warn(
           "No se puede añadir la puerta: conflicto con otra entidad"
@@ -995,7 +988,8 @@ const ThermalHouseSimulator = () => {
         position: contextMenu.wallPosition,
         direction: contextMenu.direction,
       };
-      const others = [...doors, ...heaters, ...acs];
+      // Include windows in the check to prevent overlapping with other windows
+      const others = [...doors, ...windows, ...heaters, ...acs];
       if (!validateCandidate(candidateFull, others)) {
         console.warn(
           "No se puede añadir la ventana: conflicto con otra entidad"
@@ -1021,7 +1015,8 @@ const ThermalHouseSimulator = () => {
       // Check overlap with doors/windows before placing
       const candidatePos = contextMenu.floorPosition;
       const candidateFull = { type: "heater", position: candidatePos };
-      const others = [...doors, ...windows, ...acs];
+      // Include heaters in the check to prevent overlapping with other heaters
+      const others = [...doors, ...windows, ...heaters, ...acs];
       if (!validateCandidate(candidateFull, others)) {
         console.warn(
           "No se puede añadir el calefactor: conflicto con otra entidad"

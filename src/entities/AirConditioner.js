@@ -6,14 +6,11 @@ import {
   WINDOW_DIRECTIONS,
   isOnWall,
   getWindowRotation,
-  updateWindowPosition,
 } from "../utils/entityUtils";
 import { validateCandidate, buildOthers } from "../utils/entityCollision";
 
-const createACBody = () => {
+const AirConditionerBody = () => {
   const { width, height, depth } = AC_CONFIG;
-  const group = new THREE.Group();
-
   const bodyMat = new THREE.MeshStandardMaterial({
     color: 0xf5f7f8,
     roughness: 0.35,
@@ -25,9 +22,11 @@ const createACBody = () => {
   body.castShadow = false;
   body.receiveShadow = true;
   body.position.y = height / 2;
-  group.add(body);
+  return body;
+};
 
-  // Frontal intake grille: thin recessed panel with slats
+const AirConditionerGrille = () => {
+  const { width, height, depth } = AC_CONFIG;
   const grilleGroup = new THREE.Group();
   const grilleMat = new THREE.MeshStandardMaterial({
     color: 0x1f2326,
@@ -49,10 +48,11 @@ const createACBody = () => {
     g.receiveShadow = false;
     grilleGroup.add(g);
   }
+  return grilleGroup;
+};
 
-  group.add(grilleGroup);
-
-  // Small decorative top vent (return)
+const AirConditionerTop = () => {
+  const { width, height, depth } = AC_CONFIG;
   const topMat = new THREE.MeshStandardMaterial({
     color: 0xeaeff1,
     roughness: 0.4,
@@ -61,12 +61,10 @@ const createACBody = () => {
   const topGeom = new THREE.BoxGeometry(width - 0.2, 0.04, depth - 0.2);
   const top = new THREE.Mesh(topGeom, topMat);
   top.position.y = height + 0.02;
-  group.add(top);
-
-  return { group, body, grilleGroup };
+  return top;
 };
 
-const createACLed = () => {
+const AirConditionerLed = () => {
   const { ledRadius, ledHeightOffset } = AC_CONFIG;
   const ledGeom = new THREE.CylinderGeometry(ledRadius, ledRadius, 0.04, 12);
   const ledMat = new THREE.MeshStandardMaterial({
@@ -100,23 +98,21 @@ class AirConditionerEntity extends EntityBase {
   constructor({ position, direction, id } = {}) {
     super({ type: "aircon", id, position });
     this.userData.direction = direction;
-    // canonical state flag
     this.userData.isActive = false;
 
-    const { group: bodyGroup, body, grilleGroup } = createACBody();
-    const { led, ledLight } = createACLed();
+    const body = AirConditionerBody();
+    const grille = AirConditionerGrille();
+    const top = AirConditionerTop();
+    const { led, ledLight } = AirConditionerLed();
 
-    this.add(bodyGroup);
-    this.add(led);
-    this.add(ledLight);
+    this.add(body, grille, top, led, ledLight);
 
     this.userData.led = led;
     this.userData.ledLight = ledLight;
-    this.userData.grille = grilleGroup;
+    this.userData.grille = grille;
     this.userData.width = AC_CONFIG.width;
     this.userData.depth = AC_CONFIG.depth;
 
-    // Position: fixed height 2 meters from floor (walls are 3m high)
     const yPos = 2;
     if (position) {
       this.position.set(position.x, yPos, position.z);
@@ -124,8 +120,6 @@ class AirConditionerEntity extends EntityBase {
       this.position.y = yPos;
     }
 
-    // Offset according to wall direction so unit sits flush on interior side.
-    // Use wall half-thickness + half AC depth so the AC center is correctly inset from wall center.
     const inset = HOUSE_CONFIG.wallThickness + AC_CONFIG.depth / 2;
     if (this.userData.direction === WINDOW_DIRECTIONS.NORTH) {
       this.position.z += inset;
@@ -139,10 +133,8 @@ class AirConditionerEntity extends EntityBase {
 
     this.rotation.y = getWindowRotation(this.userData.direction);
 
-    // Toggle: update visuals based on canonical `isActive`
     this.onToggle = (instant = false) => {
       const isOn = !!this.userData.isActive;
-      // no alias; visuals driven from canonical `isActive`
       const led = this.userData.led;
       const ledLight = this.userData.ledLight;
       if (led && led.material) {
@@ -169,7 +161,6 @@ class AirConditionerEntity extends EntityBase {
       }
     };
 
-    // Animation: subtle breathing/pulse of LED when on
     this.updateAnimation = () => {
       const led = this.userData.led;
       const light = this.userData.ledLight;
@@ -189,17 +180,13 @@ class AirConditionerEntity extends EntityBase {
   }
 
   getCutoutBrush() {
-    // AC no longer creates a wall cutout. Return null so no CSG is applied.
     return null;
   }
 
   validatePosition(world = null, basePos = null) {
-    // reuse window/door edge validation: AC sits on wall, so same constraints
-
     const pos = basePos ||
       this.userData.basePosition || { x: this.position.x, z: this.position.z };
 
-    // canonical candidate placed on wall edge depending on direction
     const candidate = {
       x: pos.x,
       z: pos.z,
@@ -215,12 +202,10 @@ class AirConditionerEntity extends EntityBase {
       candidate.x = -5;
     }
 
-    // basic geometry checks (wall-edge)
     if (!isOnWall(candidate)) return false;
 
     if (!world) return true;
 
-    // Normalize candidate and build others list from provided world object
     const candidateFull = {
       type: "aircon",
       position: { x: candidate.x, z: candidate.z },
@@ -237,7 +222,6 @@ class AirConditionerEntity extends EntityBase {
   }
 
   onMove(oldBase, newBase, opts = {}) {
-    // set fixed height and inset by wall half-thickness + half AC depth
     const yPos = 2;
     this.position.set(newBase.x, yPos, newBase.z);
     const inset = HOUSE_CONFIG.wallThickness + AC_CONFIG.depth / 2;
@@ -254,7 +238,6 @@ class AirConditionerEntity extends EntityBase {
 }
 
 export const AirConditioner = ({ position, direction, id } = {}) => {
-  // AC must fit within wall height
   if (AC_CONFIG.height > HOUSE_CONFIG.wallHeight) {
     console.warn("AC height exceeds wall height, cannot create unit");
     return null;
@@ -266,9 +249,6 @@ export const AirConditioner = ({ position, direction, id } = {}) => {
   }
   return new AirConditionerEntity({ position, direction, id });
 };
-
-// Pre-creation validation without instantiating 3D objects
-// NOTE: pre-creation validation moved into AirConditionerEntity.validatePosition
 
 export const toggleAirConditioner = (acGroup, instant = false) => {
   if (!acGroup?.userData) return;

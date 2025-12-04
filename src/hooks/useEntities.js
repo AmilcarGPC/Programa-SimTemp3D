@@ -4,26 +4,6 @@ import {
   buildOthers,
 } from "../utils/entityCollision";
 
-/*
-  useEntities: Hook genérico para manejar entidades basadas en EntityBase.
-
-  Options:
-    - type: string (informativo)
-    - createEntity: (data) => THREE.Object3D (debe extender EntityBase)
-    - toStateInfo?: (entity) => { id, position, direction }
-    - onAdd?: (entity, data, ctx) => void  // setValidator, onMove, etc.
-    - onRemove?: (entity) => void
-    - positionMapper?: (statePos, entity) => void // aplicar inset/offsets a entity.position
-    - extraCommitValidation?: (candidate, world, ctx) => boolean
-    - initialState?: []
-
-  Exporta:
-    - items, addItem, removeItem, toggleItem, updateItemPositionInState
-    - previewMoveItem(id, newBasePos)
-    - commitMoveItem(id, finalBasePos, world)
-    - clearAllItems
-*/
-
 export const useEntities = (scene, options = {}) => {
   const {
     type = "entity",
@@ -37,7 +17,7 @@ export const useEntities = (scene, options = {}) => {
     beforeCreate,
     getWorld,
     initialState = [],
-    showAlert, // New: callback for showing alerts
+    showAlert,
   } = options;
 
   const [items, setItems] = useState(initialState);
@@ -105,7 +85,6 @@ export const useEntities = (scene, options = {}) => {
 
   const updateItemPositionInState = useCallback((id, pos) => {
     const obj = objectsRef.current.get(id);
-    // First apply mapping to the actual object (entity-driven if possible)
     if (obj) {
       const prevBase = obj.userData.basePosition || {
         x: obj.position.x,
@@ -119,12 +98,10 @@ export const useEntities = (scene, options = {}) => {
       } else if (typeof positionMapper === "function") {
         positionMapper(pos, obj);
       } else {
-        // default behaviour: place at base pos, keep current y
         const y = obj.position.y || 0;
         obj.position.set(pos.x, y, pos.z);
       }
       obj.userData.basePosition = { x: pos.x, z: pos.z };
-      // Prefer entity-provided canonical position for state if available
       const canonical =
         typeof obj.toInfo === "function"
           ? obj.toInfo().position
@@ -133,7 +110,6 @@ export const useEntities = (scene, options = {}) => {
         prev.map((it) => (it.id === id ? { ...it, position: canonical } : it))
       );
     } else {
-      // fallback: update state only
       setItems((prev) =>
         prev.map((it) => (it.id === id ? { ...it, position: pos } : it))
       );
@@ -148,9 +124,6 @@ export const useEntities = (scene, options = {}) => {
           (c) => c.userData && c.userData.type === type && c.userData.id === id
         );
       if (!obj) return false;
-      // Run local validation (grid / entity-specific) even for previews.
-      // This prevents previews from showing when the candidate is locally invalid
-      // (e.g., AC outside wall bounds) while still avoiding global/world checks.
       const snapped = {
         x: Math.round(newBasePos.x),
         z: Math.round(newBasePos.z),
@@ -159,11 +132,9 @@ export const useEntities = (scene, options = {}) => {
         try {
           const localOk = obj.validatePosition(null, snapped);
           if (!localOk) {
-            // Don't show alert on preview, only on commit
             return false;
           }
         } catch (e) {
-          // On validator error, block preview
           return false;
         }
       }
@@ -197,7 +168,6 @@ export const useEntities = (scene, options = {}) => {
         );
       if (!obj) return false;
 
-      // Check local validation first (wall bounds, grid limits, etc.)
       const snapped = {
         x: Math.round(finalBasePos.x),
         z: Math.round(finalBasePos.z),
@@ -218,7 +188,6 @@ export const useEntities = (scene, options = {}) => {
               };
               const entityName = typeNames[type] || "entidad";
 
-              // Check if it's a wall-mounted entity
               if (
                 type === "door" ||
                 type === "window" ||
@@ -244,7 +213,6 @@ export const useEntities = (scene, options = {}) => {
         }
       }
 
-      // build candidate for external checks (overlaps with other entities)
       const candidate = {
         id,
         position: finalBasePos,
@@ -252,7 +220,6 @@ export const useEntities = (scene, options = {}) => {
         type: obj.userData?.type || type,
       };
 
-      // Check for overlaps with other entities
       const others = buildOthers(world, id);
       const validation = validateCandidateWithMessage(candidate, others);
 

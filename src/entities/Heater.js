@@ -5,148 +5,154 @@ import { HEATER_CONFIG } from "../config/entityConfig";
 import { EntityBase } from "./EntityBase";
 import { validateCandidate, buildOthers } from "../utils/entityCollision";
 
-/**
- * Crea un calefactor profesional como un Group de Three.js
- * - tamaño base: 1 x 1 (ancho x profundidad)
- * - altura: 1.5
- * - diseño realista con rejillas, panel frontal y LED superior
- * - LED: indicador en la parte superior (rojo=apagado, azul=encendido)
- */
+const HeaterBody = () => {
+  const bodyMat = new THREE.MeshStandardMaterial({
+    color: 0xe8e8e8,
+    roughness: 0.4,
+    metalness: 0.2,
+  });
+
+  const bodyGeom = new THREE.BoxGeometry(
+    HEATER_CONFIG.width,
+    HEATER_CONFIG.height,
+    HEATER_CONFIG.depth
+  );
+  const body = new THREE.Mesh(bodyGeom, bodyMat);
+  body.position.y = HEATER_CONFIG.height / 2;
+  body.castShadow = false;
+  body.receiveShadow = true;
+  return body;
+};
+
+const HeaterPanel = () => {
+  const panelMat = new THREE.MeshStandardMaterial({
+    color: 0x2c2c2c,
+    roughness: 0.3,
+    metalness: 0.5,
+  });
+
+  const panelGeom = new THREE.BoxGeometry(
+    HEATER_CONFIG.width - 0.1,
+    HEATER_CONFIG.height - 0.2,
+    0.02
+  );
+  const panel = new THREE.Mesh(panelGeom, panelMat);
+  panel.position.set(
+    0,
+    HEATER_CONFIG.height / 2,
+    HEATER_CONFIG.depth / 2 + 0.01
+  );
+  panel.castShadow = false;
+  panel.receiveShadow = true;
+  return panel;
+};
+
+const HeaterGrilles = () => {
+  const group = new THREE.Group();
+  const grillMat = new THREE.MeshStandardMaterial({
+    color: 0x1a1a1a,
+    roughness: 0.8,
+    metalness: 0.3,
+  });
+
+  const grillCount = 8;
+  const grillHeight = 0.03;
+  const grillSpacing = (HEATER_CONFIG.height - 0.4) / grillCount;
+
+  for (let i = 0; i < grillCount; i++) {
+    const grillGeom = new THREE.BoxGeometry(
+      HEATER_CONFIG.width - 0.15,
+      grillHeight,
+      0.01
+    );
+    const grill = new THREE.Mesh(grillGeom, grillMat);
+    grill.position.set(
+      0,
+      0.3 + i * grillSpacing,
+      HEATER_CONFIG.depth / 2 + 0.02
+    );
+    grill.castShadow = false;
+    group.add(grill);
+  }
+  return group;
+};
+
+const HeaterFeet = () => {
+  const footMat = new THREE.MeshStandardMaterial({
+    color: 0x3a3a3a,
+    roughness: 0.7,
+    metalness: 0.1,
+  });
+
+  const footGeom = new THREE.BoxGeometry(
+    HEATER_CONFIG.width - 0.1,
+    0.05,
+    HEATER_CONFIG.depth - 0.1
+  );
+  const foot = new THREE.Mesh(footGeom, footMat);
+  foot.position.y = 0.025;
+  foot.castShadow = false;
+  foot.receiveShadow = true;
+  return foot;
+};
+
+const HeaterTop = () => {
+  const topMat = new THREE.MeshStandardMaterial({
+    color: 0xcccccc,
+    roughness: 0.35,
+    metalness: 0.3,
+  });
+
+  const topGeom = new THREE.BoxGeometry(
+    HEATER_CONFIG.width,
+    0.08,
+    HEATER_CONFIG.depth
+  );
+  const top = new THREE.Mesh(topGeom, topMat);
+  top.position.y = HEATER_CONFIG.height + 0.04;
+  top.castShadow = false;
+  top.receiveShadow = true;
+  return top;
+};
+
+const HeaterLed = () => {
+  const ledGeom = new THREE.CylinderGeometry(0.06, 0.06, 0.04, 16);
+  const ledMat = new THREE.MeshStandardMaterial({
+    color: 0xff0000,
+    emissive: 0xff0000,
+    emissiveIntensity: 0.6,
+    roughness: 0.2,
+    metalness: 0.1,
+  });
+  const led = new THREE.Mesh(ledGeom, ledMat);
+  led.position.set(0, HEATER_CONFIG.height + 0.08, 0);
+  led.castShadow = false;
+  led.receiveShadow = false;
+
+  const ledLight = new THREE.PointLight(0xff0000, 0.5, 2.0);
+  ledLight.position.set(0, HEATER_CONFIG.height + 0.12, 0);
+  ledLight.castShadow = false;
+
+  return { led, ledLight };
+};
+
 class HeaterEntity extends EntityBase {
   constructor({ position, id } = {}) {
     super({ type: "heater", id, position });
-    // canonical state flag
     this.userData.isActive = false;
 
-    // ===== CUERPO PRINCIPAL =====
-    const bodyMat = new THREE.MeshStandardMaterial({
-      color: 0xe8e8e8,
-      roughness: 0.4,
-      metalness: 0.2,
-    });
+    const body = HeaterBody();
+    const panel = HeaterPanel();
+    const grilles = HeaterGrilles();
+    const feet = HeaterFeet();
+    const top = HeaterTop();
+    const { led, ledLight } = HeaterLed();
 
-    const bodyGeom = new THREE.BoxGeometry(
-      HEATER_CONFIG.width,
-      HEATER_CONFIG.height,
-      HEATER_CONFIG.depth
-    );
-    const body = new THREE.Mesh(bodyGeom, bodyMat);
-    body.position.y = HEATER_CONFIG.height / 2;
-    body.castShadow = false;
-    body.receiveShadow = true;
-    this.add(body);
+    this.add(body, panel, grilles, feet, top, led, ledLight);
 
-    // ===== PANEL FRONTAL DECORATIVO =====
-    const panelMat = new THREE.MeshStandardMaterial({
-      color: 0x2c2c2c,
-      roughness: 0.3,
-      metalness: 0.5,
-    });
-
-    const panelGeom = new THREE.BoxGeometry(
-      HEATER_CONFIG.width - 0.1,
-      HEATER_CONFIG.height - 0.2,
-      0.02
-    );
-    const panel = new THREE.Mesh(panelGeom, panelMat);
-    panel.position.set(
-      0,
-      HEATER_CONFIG.height / 2,
-      HEATER_CONFIG.depth / 2 + 0.01
-    );
-    panel.castShadow = false;
-    panel.receiveShadow = true;
-    this.add(panel);
-
-    // ===== REJILLAS HORIZONTALES (simulan salida de aire) =====
-    const grillMat = new THREE.MeshStandardMaterial({
-      color: 0x1a1a1a,
-      roughness: 0.8,
-      metalness: 0.3,
-    });
-
-    const grillCount = 8;
-    const grillHeight = 0.03;
-    const grillSpacing = (HEATER_CONFIG.height - 0.4) / grillCount;
-
-    for (let i = 0; i < grillCount; i++) {
-      const grillGeom = new THREE.BoxGeometry(
-        HEATER_CONFIG.width - 0.15,
-        grillHeight,
-        0.01
-      );
-      const grill = new THREE.Mesh(grillGeom, grillMat);
-      grill.position.set(
-        0,
-        0.3 + i * grillSpacing,
-        HEATER_CONFIG.depth / 2 + 0.02
-      );
-      grill.castShadow = false;
-      this.add(grill);
-    }
-
-    // ===== BASE/PIES =====
-    const footMat = new THREE.MeshStandardMaterial({
-      color: 0x3a3a3a,
-      roughness: 0.7,
-      metalness: 0.1,
-    });
-
-    const footGeom = new THREE.BoxGeometry(
-      HEATER_CONFIG.width - 0.1,
-      0.05,
-      HEATER_CONFIG.depth - 0.1
-    );
-    const foot = new THREE.Mesh(footGeom, footMat);
-    foot.position.y = 0.025;
-    foot.castShadow = false;
-    foot.receiveShadow = true;
-    this.add(foot);
-
-    // ===== TAPA SUPERIOR =====
-    const topMat = new THREE.MeshStandardMaterial({
-      color: 0xcccccc,
-      roughness: 0.35,
-      metalness: 0.3,
-    });
-
-    const topGeom = new THREE.BoxGeometry(
-      HEATER_CONFIG.width,
-      0.08,
-      HEATER_CONFIG.depth
-    );
-    const top = new THREE.Mesh(topGeom, topMat);
-    top.position.y = HEATER_CONFIG.height + 0.04;
-    top.castShadow = false;
-    top.receiveShadow = true;
-    this.add(top);
-
-    // ===== LED INDICADOR EN LA PARTE SUPERIOR =====
-    const ledGeom = new THREE.CylinderGeometry(0.06, 0.06, 0.04, 16);
-    const ledMat = new THREE.MeshStandardMaterial({
-      color: 0xff0000,
-      emissive: 0xff0000,
-      emissiveIntensity: 0.6,
-      roughness: 0.2,
-      metalness: 0.1,
-    });
-    const led = new THREE.Mesh(ledGeom, ledMat);
-    led.position.set(0, HEATER_CONFIG.height + 0.08, 0);
-    led.castShadow = false;
-    led.receiveShadow = false;
-    this.add(led);
-
-    // ===== LUZ DEL LED (PointLight) =====
-    const ledLight = new THREE.PointLight(0xff0000, 0.5, 2.0);
-    ledLight.position.set(0, HEATER_CONFIG.height + 0.12, 0);
-    ledLight.castShadow = false;
-    this.add(ledLight);
-
-    // Guardar referencias
     this.userData.led = led;
     this.userData.ledLight = ledLight;
 
-    // Exponer métodos para toggle y animación
     this.onToggle = (instant = false) => {
       const isOn = !!this.userData.isActive;
       if (this.userData.led && this.userData.led.material) {
@@ -174,37 +180,36 @@ class HeaterEntity extends EntityBase {
       }
     };
 
-    this.updateAnimation = () => {
-      // placeholder para futuras animaciones (e.g., LED pulsante)
-    };
+    this.updateAnimation = () => {};
 
-    // Posicionar según posición (snap a grid)
     if (position) {
       const snapped = snapToGrid(position);
       this.position.set(snapped.x, 0, snapped.z);
-      // Orient heater to face center (0,0) so its front always points inward
       try {
         const raw = Math.atan2(-this.position.x, -this.position.z);
         const step = Math.PI / 2; // 90 degrees
         const quant = Math.round(raw / step) * step;
         this.rotation.y = quant;
-      } catch (e) {
-        // defensive: ignore
-      }
+      } catch (e) {}
     }
   }
 
   validatePosition(world = null, basePos = null) {
     const pos = basePos ||
       this.userData.basePosition || { x: this.position.x, z: this.position.z };
-    // Use centralized helper for floor checks
-    if (!isOnFloor({ x: pos.x, z: pos.z })) return false;
+
+    const candidate = {
+      x: pos.x,
+      z: pos.z,
+    };
+
+    if (!isOnFloor(candidate)) return false;
 
     if (!world) return true;
 
     const candidateFull = {
       type: "heater",
-      position: { x: pos.x, z: pos.z },
+      position: { x: candidate.x, z: candidate.z },
       id: this.userData.id,
     };
 
@@ -220,20 +225,16 @@ class HeaterEntity extends EntityBase {
     try {
       const snapped = snapToGrid({ x: newBase.x, z: newBase.z });
       this.position.set(snapped.x, 0, snapped.z);
-      // rotate to face center after move
       try {
         const raw = Math.atan2(-this.position.x, -this.position.z);
         const step = Math.PI / 2;
         this.rotation.y = Math.round(raw / step) * step;
       } catch (e) {}
-    } catch (e) {
-      // ignore
-    }
+    } catch (e) {}
   }
 }
 
 export const Heater = ({ position, id }) => {
-  console.log("CH", position, id);
   return new HeaterEntity({ position, id });
 };
 

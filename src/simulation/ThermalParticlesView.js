@@ -1,64 +1,62 @@
 import * as THREE from "three";
 
 export class ThermalParticlesView {
-    constructor(grid) {
-        this.grid = grid;
-        this.mesh = null;
-        this.dummy = new THREE.Object3D();
-        this.init();
+  constructor(grid) {
+    this.grid = grid;
+    this.mesh = null;
+    this.dummy = new THREE.Object3D();
+    this.init();
+  }
+
+  init() {
+    const particles = this.grid.particles;
+    const count = particles.length;
+
+    // Calculate size based on density to avoid overlap
+    // Step size is 1 / density
+    // We want diameter to be slightly less than step
+    // Original radius factor 0.4. Reduced by 30% -> 0.28
+    const step = 1 / this.grid.density;
+    const radius = step * 0.28;
+
+    const geometry = new THREE.SphereGeometry(radius, 8, 8);
+    const material = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+    });
+
+    this.mesh = new THREE.InstancedMesh(geometry, material, count);
+    this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+
+    for (let i = 0; i < count; i++) {
+      const p = particles[i];
+      this.dummy.position.set(p.x, 0.5, p.z); // y=0.5
+      this.dummy.scale.set(1, 1, 1);
+      this.dummy.updateMatrix();
+      this.mesh.setMatrixAt(i, this.dummy.matrix);
     }
 
-    init() {
-        const particles = this.grid.particles;
-        const count = particles.length;
+    this.mesh.instanceMatrix.needsUpdate = true;
+    this.update();
+  }
 
-        // Calculate size based on density to avoid overlap
-        // Step size is 1 / density
-        // We want diameter to be slightly less than step
-        // Original radius factor 0.4. Reduced by 30% -> 0.28
-        const step = 1 / this.grid.density;
-        const radius = step * 0.28;
+  update() {
+    if (!this.mesh || !this.grid) return;
 
-        const geometry = new THREE.SphereGeometry(radius, 8, 8);
-        const material = new THREE.MeshBasicMaterial({
-            color: 0xffffff,
-        });
+    const particles = this.grid.particles;
+    const count = particles.length;
 
-        this.mesh = new THREE.InstancedMesh(geometry, material, count);
-        this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-
-        // Set initial positions
-        for (let i = 0; i < count; i++) {
-            const p = particles[i];
-            this.dummy.position.set(p.x, 0.5, p.z); // y=0.5
-            this.dummy.scale.set(1, 1, 1);
-            this.dummy.updateMatrix();
-            this.mesh.setMatrixAt(i, this.dummy.matrix);
-        }
-
-        this.mesh.instanceMatrix.needsUpdate = true;
-        this.update();
+    for (let i = 0; i < count; i++) {
+      const p = particles[i];
+      this.mesh.setColorAt(i, p.color);
     }
 
-    update() {
-        if (!this.mesh || !this.grid) return;
+    this.mesh.instanceColor.needsUpdate = true;
+  }
 
-        const particles = this.grid.particles;
-        const count = particles.length;
-
-        for (let i = 0; i < count; i++) {
-            const p = particles[i];
-            // Color is already updated in Particle class
-            this.mesh.setColorAt(i, p.color);
-        }
-
-        this.mesh.instanceColor.needsUpdate = true;
+  dispose() {
+    if (this.mesh) {
+      this.mesh.geometry.dispose();
+      this.mesh.material.dispose();
     }
-
-    dispose() {
-        if (this.mesh) {
-            this.mesh.geometry.dispose();
-            this.mesh.material.dispose();
-        }
-    }
+  }
 }

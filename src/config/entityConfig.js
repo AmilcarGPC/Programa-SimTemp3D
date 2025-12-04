@@ -1,10 +1,5 @@
 import { HOUSE_CONFIG } from "./sceneConfig";
 
-/**
- * Configuración específica de entidades (calefactor, aire acondicionado, etc.)
- * Centraliza tamaños y parámetros visuales/animación usados por las entidades.
- */
-
 export const AC_CONFIG = {
   // dimensiones (ancho x alto x profundidad) en metros
   width: 2.5,

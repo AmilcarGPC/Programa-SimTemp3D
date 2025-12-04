@@ -1,8 +1,3 @@
-/**
- * Configuración centralizada para la escena 3D
- * Facilita el mantenimiento y ajustes globales
- */
-
 export const HOUSE_CONFIG = {
   size: 10,
   wallThickness: 0.3,
@@ -19,8 +14,8 @@ export const CAMERA_CONFIG = {
 
 export const RENDERER_CONFIG = {
   maxPixelRatio: 2,
-  shadowMapType: "PCFSoft", // THREE.PCFSoftShadowMap
-  toneMapping: "ACESFilmic", // THREE.ACESFilmicToneMapping
+  shadowMapType: "PCFSoft",
+  toneMapping: "ACESFilmic",
   toneMappingExposure: 1.0,
 };
 
