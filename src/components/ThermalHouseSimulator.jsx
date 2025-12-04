@@ -100,8 +100,6 @@ const ThermalHouseSimulator = () => {
   useWindowResize(camera, renderer, composer, containerRef);
 
   // Door state previously provided by useDoors wrapper
-  const [placementMode, setPlacementMode] = React.useState(false);
-  const [selectedDirection, setSelectedDirection] = React.useState("north");
 
   const {
     items: doors,
@@ -227,7 +225,7 @@ const ThermalHouseSimulator = () => {
     ]
   );
 
-  const fps = useAnimationLoop(composer, handleFrame);
+  useAnimationLoop(composer, handleFrame);
 
   // Inicializar Grid y Partículas
   useEffect(() => {
