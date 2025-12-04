@@ -388,111 +388,75 @@ const ThermalHouseSimulator = () => {
   const handleSelectComponent = (componentType) => {
     if (!contextMenu) return;
 
-    if (componentType === "door") {
-      const candidate = {
-        position: contextMenu.wallPosition,
-        direction: contextMenu.direction,
-      };
-      const candidateFull = {
-        type: "door",
-        position: contextMenu.wallPosition,
-        direction: contextMenu.direction,
-      };
-      // Include doors in the check to prevent overlapping with other doors
-      const others = [...doors, ...windows, ...heaters, ...acs];
-      if (!validateCandidate(candidateFull, others)) {
-        console.warn(
-          "No se puede añadir la puerta: conflicto con otra entidad"
-        );
-        showAlert("error", "No se puede añadir la puerta: posición ocupada");
-        return;
-      }
-      const door = addDoor({
-        position: contextMenu.wallPosition,
-        direction: contextMenu.direction,
-      });
-      if (door) {
-        console.log("🚪 Puerta añadida desde menú contextual");
-      }
-    } else if (componentType === "window") {
-      const candidate = {
-        position: contextMenu.wallPosition,
-        direction: contextMenu.direction,
-      };
-      const candidateFull = {
-        type: "window",
-        position: contextMenu.wallPosition,
-        direction: contextMenu.direction,
-      };
-      // Include windows in the check to prevent overlapping with other windows
-      const others = [...doors, ...windows, ...heaters, ...acs];
-      if (!validateCandidate(candidateFull, others)) {
-        console.warn(
-          "No se puede añadir la ventana: conflicto con otra entidad"
-        );
-        showAlert("error", "No se puede añadir la ventana: posición ocupada");
-        return;
-      }
-      console.log("WWI", contextMenu.wallPosition, contextMenu.direction);
-      const win = addWindow({
-        position: contextMenu.wallPosition,
-        direction: contextMenu.direction,
-      });
-      console.log("AA");
-      if (win) {
-        console.log("🪟 Ventana añadida desde menú contextual");
-      }
-    } else if (componentType === "heater") {
-      // floorPosition expected in contextMenu
-      if (!contextMenu || !contextMenu.floorPosition) {
-        console.warn("No floor position available for heater placement");
-        return;
-      }
-      // Check overlap with doors/windows before placing
-      const candidatePos = contextMenu.floorPosition;
-      const candidateFull = { type: "heater", position: candidatePos };
-      // Include heaters in the check to prevent overlapping with other heaters
-      const others = [...doors, ...windows, ...heaters, ...acs];
-      if (!validateCandidate(candidateFull, others)) {
-        console.warn(
-          "No se puede añadir el calefactor: conflicto con otra entidad"
-        );
-        showAlert(
-          "error",
-          "No se puede añadir el calefactor: posición ocupada"
-        );
-        return;
-      }
-      const heater = addHeater({
-        position: contextMenu.floorPosition,
-      });
-      if (heater) console.log("🔥 Calefactor añadido desde menú contextual");
-    } else if (componentType === "aircon") {
-      const candidate = {
-        position: contextMenu.wallPosition,
-        direction: contextMenu.direction,
-      };
-      const candidateFull = {
-        type: "aircon",
-        position: contextMenu.wallPosition,
-        direction: contextMenu.direction,
-      };
-      const others = [...doors, ...windows, ...heaters, ...acs];
-      if (!validateCandidate(candidateFull, others)) {
-        console.warn(
-          "No se puede añadir el aire acondicionado: conflicto con otra entidad"
-        );
-        showAlert(
-          "error",
-          "No se puede añadir el aire acondicionado: posición ocupada"
-        );
-        return;
-      }
-      const ac = addAirConditioner({
-        position: contextMenu.wallPosition,
-        direction: contextMenu.direction,
-      });
-      if (ac) console.log("❄️ AC añadido desde menú contextual");
+    const strategies = {
+      door: {
+        createCandidate: () => ({
+          position: contextMenu.wallPosition,
+          direction: contextMenu.direction,
+        }),
+        addFn: addDoor,
+        label: "puerta",
+        log: "🚪 Puerta añadida desde menú contextual",
+        errorMsg: "No se puede añadir la puerta: posición ocupada",
+      },
+      window: {
+        createCandidate: () => ({
+          position: contextMenu.wallPosition,
+          direction: contextMenu.direction,
+        }),
+        addFn: addWindow,
+        label: "ventana",
+        log: "🪟 Ventana añadida desde menú contextual",
+        errorMsg: "No se puede añadir la ventana: posición ocupada",
+      },
+      heater: {
+        createCandidate: () => {
+          if (!contextMenu.floorPosition) return null;
+          return { position: contextMenu.floorPosition };
+        },
+        addFn: addHeater,
+        label: "calefactor",
+        log: "🔥 Calefactor añadido desde menú contextual",
+        errorMsg: "No se puede añadir el calefactor: posición ocupada",
+        checkFloor: true,
+      },
+      aircon: {
+        createCandidate: () => ({
+          position: contextMenu.wallPosition,
+          direction: contextMenu.direction,
+        }),
+        addFn: addAirConditioner,
+        label: "aire acondicionado",
+        log: "❄️ AC añadido desde menú contextual",
+        errorMsg: "No se puede añadir el aire acondicionado: posición ocupada",
+      },
+    };
+
+    const strategy = strategies[componentType];
+    if (!strategy) return;
+
+    if (strategy.checkFloor && !contextMenu.floorPosition) {
+      console.warn("No floor position available for heater placement");
+      return;
+    }
+
+    const candidateData = strategy.createCandidate();
+    if (!candidateData) return;
+
+    const candidateFull = { type: componentType, ...candidateData };
+    const allEntities = [...doors, ...windows, ...heaters, ...acs];
+
+    if (!validateCandidate(candidateFull, allEntities)) {
+      console.warn(
+        `No se puede añadir ${strategy.label}: conflicto con otra entidad`
+      );
+      showAlert("error", strategy.errorMsg);
+      return;
+    }
+
+    const entity = strategy.addFn(candidateData);
+    if (entity) {
+      console.log(strategy.log);
     }
   };
 
