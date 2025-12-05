@@ -40,15 +40,19 @@ export class ThermalGrid {
   }
 
   initialize() {
-    const step = 1 / this.density;
-    this.cols = Math.floor((this.maxX - this.minX) / step) + 1;
-    this.rows = Math.floor((this.maxZ - this.minZ) / step) + 1;
+    // Usar enteros para evitar errores de punto flotante con densidades como 3
+    this.cols = Math.round((this.maxX - this.minX) * this.density) + 1;
+    this.rows = Math.round((this.maxZ - this.minZ) * this.density) + 1;
+
     const houseHalfSize = HOUSE_CONFIG.size / 2;
     const wallThickness = HOUSE_CONFIG.wallThickness;
     const innerHalf = houseHalfSize + wallThickness;
 
-    for (let z = this.minZ; z <= this.maxZ; z += step) {
-      for (let x = this.minX; x <= this.maxX; x += step) {
+    for (let j = 0; j < this.rows; j++) {
+      const z = this.minZ + j / this.density;
+      for (let i = 0; i < this.cols; i++) {
+        const x = this.minX + i / this.density;
+
         let temp = 45;
         if (
           x > -innerHalf &&
@@ -69,10 +73,11 @@ export class ThermalGrid {
     const wallThickness = HOUSE_CONFIG.wallThickness;
     const innerHalf = houseHalfSize + wallThickness;
 
-    const startI = Math.ceil((-innerHalf - this.minX) / step);
-    const endI = Math.floor((innerHalf - this.minX) / step);
-    const startJ = Math.ceil((-innerHalf - this.minZ) / step);
-    const endJ = Math.floor((innerHalf - this.minZ) / step);
+    // Usar multiplicación por densidad en lugar de división por step
+    const startI = Math.ceil((-innerHalf - this.minX) * this.density);
+    const endI = Math.floor((innerHalf - this.minX) * this.density);
+    const startJ = Math.ceil((-innerHalf - this.minZ) * this.density);
+    const endJ = Math.floor((innerHalf - this.minZ) * this.density);
 
     const width = endI - startI + 1;
     const height = endJ - startJ + 1;
@@ -118,9 +123,9 @@ export class ThermalGrid {
       if (isHorizontal) {
         const startX = pos.x - entityWidth / 2;
         const endX = pos.x + entityWidth / 2;
-        const minInternalX = this.minX + startI * step;
-        const idxStart = Math.floor((startX - minInternalX) / step);
-        const idxEnd = Math.ceil((endX - minInternalX) / step);
+        const minInternalX = this.minX + startI / this.density;
+        const idxStart = Math.floor((startX - minInternalX) * this.density);
+        const idxEnd = Math.ceil((endX - minInternalX) * this.density);
         const validStart = Math.max(0, idxStart);
         const validEnd = Math.min(width - 1, idxEnd);
         const yIndex = dir === "north" ? 0 : height + 1;
@@ -130,9 +135,9 @@ export class ThermalGrid {
       } else {
         const startZ = pos.z - entityWidth / 2;
         const endZ = pos.z + entityWidth / 2;
-        const minInternalZ = this.minZ + startJ * step;
-        const idxStart = Math.floor((startZ - minInternalZ) / step);
-        const idxEnd = Math.ceil((endZ - minInternalZ) / step);
+        const minInternalZ = this.minZ + startJ / this.density;
+        const idxStart = Math.floor((startZ - minInternalZ) * this.density);
+        const idxEnd = Math.ceil((endZ - minInternalZ) * this.density);
         const validStart = Math.max(0, idxStart);
         const validEnd = Math.min(height - 1, idxEnd);
         const xIndex = dir === "west" ? 0 : width + 1;
@@ -152,8 +157,8 @@ export class ThermalGrid {
       if (!entity.isActive) return;
       const pos = entity.position;
       const dir = entity.userData?.direction || entity.direction;
-      const minInternalX = this.minX + startI * step;
-      const minInternalZ = this.minZ + startJ * step;
+      const minInternalX = this.minX + startI / this.density;
+      const minInternalZ = this.minZ + startJ / this.density;
 
       let widthX, depthZ;
       if (dir === "north" || dir === "south") {
@@ -169,10 +174,10 @@ export class ThermalGrid {
       const startZ = pos.z - depthZ / 2;
       const endZ = pos.z + depthZ / 2;
 
-      const idxStartX = Math.floor((startX - minInternalX) / step);
-      const idxEndX = Math.ceil((endX - minInternalX) / step);
-      const idxStartZ = Math.floor((startZ - minInternalZ) / step);
-      const idxEndZ = Math.ceil((endZ - minInternalZ) / step);
+      const idxStartX = Math.floor((startX - minInternalX) * this.density);
+      const idxEndX = Math.ceil((endX - minInternalX) * this.density);
+      const idxStartZ = Math.floor((startZ - minInternalZ) * this.density);
+      const idxEndZ = Math.ceil((endZ - minInternalZ) * this.density);
 
       const validStartX = Math.max(0, idxStartX);
       const validEndX = Math.min(width - 1, idxEndX);
@@ -217,8 +222,8 @@ export class ThermalGrid {
       if (!entity.isActive) return;
       const pos = entity.position;
       const dir = entity.userData?.direction || entity.direction;
-      const minInternalX = this.minX + startI * step;
-      const minInternalZ = this.minZ + startJ * step;
+      const minInternalX = this.minX + startI / this.density;
+      const minInternalZ = this.minZ + startJ / this.density;
 
       let widthX, depthZ;
       if (dir === "north" || dir === "south") {
@@ -234,10 +239,10 @@ export class ThermalGrid {
       const startZ = pos.z - depthZ / 2;
       const endZ = pos.z + depthZ / 2;
 
-      const idxStartX = Math.floor((startX - minInternalX) / step);
-      const idxEndX = Math.ceil((endX - minInternalX) / step);
-      const idxStartZ = Math.floor((startZ - minInternalZ) / step);
-      const idxEndZ = Math.ceil((endZ - minInternalZ) / step);
+      const idxStartX = Math.floor((startX - minInternalX) * this.density);
+      const idxEndX = Math.ceil((endX - minInternalX) * this.density);
+      const idxStartZ = Math.floor((startZ - minInternalZ) * this.density);
+      const idxEndZ = Math.ceil((endZ - minInternalZ) * this.density);
 
       const validStartX = Math.max(0, idxStartX);
       const validEndX = Math.min(width - 1, idxEndX);
@@ -273,10 +278,10 @@ export class ThermalGrid {
     const wallThickness = HOUSE_CONFIG.wallThickness;
     const innerHalf = houseHalfSize + wallThickness;
 
-    const startI = Math.ceil((-innerHalf - this.minX) / step);
-    const endI = Math.floor((innerHalf - this.minX) / step);
-    const startJ = Math.ceil((-innerHalf - this.minZ) / step);
-    const endJ = Math.floor((innerHalf - this.minZ) / step);
+    const startI = Math.ceil((-innerHalf - this.minX) * this.density);
+    const endI = Math.floor((innerHalf - this.minX) * this.density);
+    const startJ = Math.ceil((-innerHalf - this.minZ) * this.density);
+    const endJ = Math.floor((innerHalf - this.minZ) * this.density);
 
     const width = endI - startI + 1;
     const height = endJ - startJ + 1;
