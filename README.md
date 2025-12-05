@@ -50,6 +50,8 @@ Raíz (principales archivos):
 	 │  ├─ ContextMenu.jsx      # 🖱️ Menú contextual (clic derecho)
 	 │  ├─ DoorControl.jsx      # 🚪 Control de puertas
 	 │  ├─ WindowControl.jsx    # 🪟 Control de ventanas
+	 │  ├─ AlertNotification.jsx # ⚠️ Sistema de notificaciones
+	 │  ├─ Tutorial.jsx         # 🎓 Guía de inicio
 	 │  └─ ThermalHouseSimulator.jsx # Orquestador principal
 	 ├─ entities/           # 📦 Definición de Entidades (Lógica + Geometría)
 	 │  ├─ EntityBase.js        # Clase base para entidades
@@ -57,13 +59,17 @@ Raíz (principales archivos):
 	 │  ├─ Window.js            # 🪟 Ventana
 	 │  ├─ Heater.js            # 🔥 Calefactor
 	 │  └─ AirConditioner.js    # ❄️ Aire Acondicionado
+	 ├─ simulation/         # 🌡️ Motor de Simulación Térmica
+	 │  ├─ ThermalGrid.js       # Lógica de la grilla y partículas
+	 │  ├─ ThermalSimulation.js # Algoritmos de difusión de calor
+	 │  └─ ThermalParticlesView.js # Representación visual de la temperatura
 	 ├─ hooks/              # Hooks personalizados
 	 │  ├─ useThreeScene.js
 	 │  ├─ useLighting.js
 	 │  ├─ usePostProcessing.js
 	 │  ├─ useAnimationLoop.js
 	 │  ├─ useWindowResize.js
-	 │  ├─ useThermalEffects.js
+	 │  ├─ useSceneInteraction.js # 🖱️ Lógica de interacción (Drag & Drop, Raycasting)
 	 │  └─ useEntities.js       # 🧩 Hook genérico de gestión de entidades
 	 ├─ utils/              # Helpers y creadores de geometría/recursos
 	 │  ├─ createGround.js
@@ -82,29 +88,39 @@ ThermalHouseSimulator
 ├─ Canvas3D (div para WebGL renderer)
 ├─ ControlPanel (UI: sliders, botones)
 ├─ MetricsBar (FPS, contador)
-└─ ContextMenu (Menú flotante para añadir/editar)
+├─ ContextMenu (Menú flotante para añadir/editar)
+└─ Tutorial (Overlay de ayuda)
 
-Internals (hooks)
+Internals (hooks & simulation)
 ├─ useThreeScene -> crea `scene`, `camera`, `renderer`
 ├─ useEntities -> gestiona estado (CRUD) de Puertas, Ventanas, etc.
-├─ useLighting -> agrega luces a `scene`
-├─ usePostProcessing -> configura `EffectComposer` y passes
-└─ useThermalEffects -> adapta `scene.background` y materiales según temperatura
+├─ useSceneInteraction -> maneja eventos de mouse (click, drag)
+├─ ThermalGrid -> simula difusión de temperatura en una matriz 2D
+└─ ThermalParticlesView -> renderiza la temperatura como partículas
 ```
 
 ## Objetivos de cada carpeta / archivo clave
 
 - `src/components/`:
-  - `ThermalHouseSimulator.jsx`: componente de orquestación; monta la escena 3D, gestiona estado de temperaturas, el sistema de entidades (`useEntities`) y la interacción del mouse (raycasting).
+
+  - `ThermalHouseSimulator.jsx`: componente de orquestación; monta la escena 3D, gestiona estado de temperaturas, el sistema de entidades (`useEntities`) y la simulación térmica.
   - `ContextMenu.jsx`: menú emergente al hacer clic derecho en muros o suelo para añadir componentes.
   - `ControlPanel.jsx`: controles UI laterales.
 
+- `src/simulation/`:
+
+  - `ThermalGrid.js`: Mantiene el estado de la temperatura en una grilla discreta. Calcula la propagación del calor considerando fuentes (calefactores, AC) y aperturas (puertas, ventanas).
+  - `ThermalSimulation.js`: Implementa la matemática de difusión térmica (ecuación del calor).
+
 - `src/entities/`:
+
   - Contiene la lógica específica de cada objeto interactivo (geometría, validación de posición, animaciones).
   - `Door.js` / `Window.js`: incluyen lógica CSG para cortar paredes.
 
 - `src/hooks/`:
-  - `useEntities.js`: Hook centralizado que maneja la lista de objetos, su adición/eliminación y movimiento. Reemplaza a los antiguos hooks específicos.
+
+  - `useEntities.js`: Hook centralizado que maneja la lista de objetos, su adición/eliminación y movimiento.
+  - `useSceneInteraction.js`: Centraliza la lógica de raycasting, detección de clics, arrastrar y soltar objetos, y manejo del menú contextual.
   - `useThreeScene.js`: inicializa `THREE.Scene`, cámara y `WebGLRenderer`.
 
 - `src/utils/`:
@@ -116,12 +132,14 @@ Internals (hooks)
 El proyecto cuenta con un sistema flexible para colocar objetos en la casa:
 
 - **Tipos soportados**:
+
   - 🚪 **Puertas**: Cortan el muro, se pueden abrir/cerrar.
   - 🪟 **Ventanas**: Cortan el muro, tienen animación de apertura.
   - 🔥 **Calefactores**: Se colocan en el suelo, tienen efecto de calor visual.
   - ❄️ **Aires Acondicionados**: Se montan en la pared (unidad exterior).
 
 - **Interacción**:
+
   - **Clic Derecho**: Abre el menú contextual para añadir objetos en la posición del cursor.
   - **Arrastrar y Soltar**: Puedes mover los objetos una vez colocados manteniendo presionado el clic izquierdo.
   - **Clic Izquierdo**: Interactúa con el objeto (abrir puerta, encender calefactor).
@@ -133,17 +151,20 @@ El proyecto cuenta con un sistema flexible para colocar objetos en la casa:
 ## Notas de diseño y mantenimiento
 
 - **Separación de responsabilidades**: La lógica de Three.js está en `hooks/` y `entities/`. React solo orquesta y muestra UI.
+- **Simulación Térmica**: Se ejecuta en `ThermalGrid` usando una aproximación de diferencias finitas para la difusión del calor.
 - **Rendimiento**: Las operaciones CSG (`three-bvh-csg`) son costosas. Se ejecutan solo al finalizar el arrastre de una puerta/ventana para evitar congelamientos durante el movimiento.
 - **Limpieza**: Se usa `disposeUtils.js` para asegurar que geometrías y materiales se liberen de la memoria GPU al eliminar objetos.
 
 ## Cómo contribuir / probar cambios
 
 1. Instalar dependencias:
+
 ```powershell
 npm install --legacy-peer-deps
 ```
 
 2. Levantar servidor dev:
+
 ```powershell
 npm run dev
 ```
