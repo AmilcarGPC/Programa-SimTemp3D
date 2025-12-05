@@ -150,8 +150,8 @@ export class ThermalGrid {
     if (doors) doors.forEach((d) => applyOpening(d, DOOR_CONFIG.width));
     if (windows) windows.forEach((w) => applyOpening(w, WINDOW_CONFIG.width));
 
-    const HEATER_TEMP = 25;
-    const AC_TEMP = 16;
+    const HEATER_TEMP = 43;
+    const AC_TEMP = -8;
 
     const applyClimateControl = (entity, temp, entityWidth, entityDepth) => {
       if (!entity.isActive) return;
