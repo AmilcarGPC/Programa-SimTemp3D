@@ -38,16 +38,12 @@ export const isOnWall = (position) => {
   }
 };
 
-// Check if a floor position is valid for floor-mounted entities (heaters)
 export const isOnFloor = (position) => {
   const { x, z } = position || {};
   const halfSize = HOUSE_CONFIG.size / 2;
-  // keep 1 unit margin from walls
-  const allowed = halfSize - 1;
+  const allowed = halfSize - 1; // mantener 1 unidad de margen de las paredes
   return Math.abs(x) <= allowed && Math.abs(z) <= allowed;
 };
-
-// Generic helper that answers: is the given base `position` on a valid wall edge
 
 export const getDoorRotation = (direction) => {
   switch (direction) {

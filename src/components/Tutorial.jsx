@@ -1,16 +1,11 @@
 import { useState, useEffect } from "react";
 import "./Tutorial.css";
 
-/**
- * Tutorial interactivo para el simulador térmico
- * Guía al usuario por las funcionalidades principales
- */
 const Tutorial = ({ isDarkMode = true, onClose }) => {
   const [currentStep, setCurrentStep] = useState(0);
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
-    // Animación de entrada
     const timer = setTimeout(() => setIsVisible(true), 100);
     return () => clearTimeout(timer);
   }, []);
@@ -264,7 +259,7 @@ const Tutorial = ({ isDarkMode = true, onClose }) => {
   };
 
   const handleSkip = () => {
-    // Marcar tutorial como completado en localStorage
+    // Marcar tutorial como completado
     localStorage.setItem("tutorial-completed", "true");
     handleClose();
   };
@@ -272,9 +267,7 @@ const Tutorial = ({ isDarkMode = true, onClose }) => {
   const step = steps[currentStep];
   const progress = ((currentStep + 1) / steps.length) * 100;
 
-  // Remove blur from highlighted section
   useEffect(() => {
-    // Remove highlight from all elements first
     const allHighlightIds = [
       "control-panel",
       "temperatures",
@@ -290,13 +283,12 @@ const Tutorial = ({ isDarkMode = true, onClose }) => {
       }
     });
 
-    // Add highlight to current step element
     if (step.highlight) {
       const element = document.getElementById(step.highlight);
       if (element) {
         element.classList.add("tutorial-highlight");
 
-        // Steps 2, 3, 4, and 9 need elevated control panel (indices 1, 2, 3, 8)
+        // Pasos 2, 3, 4 y 9 necesitan panel de control elevado (índices 1, 2, 3, 8)
         const shouldElevatePanel = [1, 2, 3, 8].includes(currentStep);
         if (shouldElevatePanel) {
           const controlPanel = document.getElementById("control-panel");
@@ -305,14 +297,13 @@ const Tutorial = ({ isDarkMode = true, onClose }) => {
           }
         }
 
-        // Step 8 needs elevated metrics bar (index 7)
+        // Paso 8 necesita barra de métricas elevada (índice 7)
         if (currentStep === 7 && step.highlight === "metrics-bar") {
           element.classList.add("tutorial-highlight-elevated");
         }
       }
     }
 
-    // Cleanup
     return () => {
       const allIds = [
         "control-panel",
@@ -333,7 +324,7 @@ const Tutorial = ({ isDarkMode = true, onClose }) => {
 
   return (
     <>
-      {/* Overlay */}
+      {/* Superposición */}
       <div
         className={`tutorial-overlay ${
           isVisible ? "tutorial-overlay--visible" : ""
@@ -341,7 +332,7 @@ const Tutorial = ({ isDarkMode = true, onClose }) => {
         onClick={handleClose}
       />
 
-      {/* Tutorial Card */}
+      {/* Tarjeta de Tutorial */}
       <div
         className={`tutorial-card ${
           isVisible ? "tutorial-card--visible" : ""
@@ -349,7 +340,7 @@ const Tutorial = ({ isDarkMode = true, onClose }) => {
           isDarkMode ? "tutorial-card--dark" : "tutorial-card--light"
         } tutorial-card--${step.position || "center"}`}
       >
-        {/* Header */}
+        {/* Encabezado */}
         <div className="tutorial-header">
           <div className="tutorial-step-counter">
             Paso {currentStep + 1} de {steps.length}
@@ -370,7 +361,7 @@ const Tutorial = ({ isDarkMode = true, onClose }) => {
           </button>
         </div>
 
-        {/* Progress Bar */}
+        {/* Barra de Progreso */}
         <div className="tutorial-progress-bar">
           <div
             className="tutorial-progress-fill"
@@ -378,14 +369,14 @@ const Tutorial = ({ isDarkMode = true, onClose }) => {
           />
         </div>
 
-        {/* Content */}
+        {/* Contenido */}
         <div className="tutorial-content">
           {step.icon && <div className="tutorial-icon">{step.icon}</div>}
           <h3 className="tutorial-title">{step.title}</h3>
           <p className="tutorial-description">{step.content}</p>
         </div>
 
-        {/* Navigation */}
+        {/* Navegación */}
         <div className="tutorial-navigation">
           <button
             className="tutorial-btn tutorial-btn-secondary"
@@ -412,7 +403,7 @@ const Tutorial = ({ isDarkMode = true, onClose }) => {
           </div>
         </div>
 
-        {/* Dots Indicator */}
+        {/* Indicador de Puntos */}
         <div className="tutorial-dots">
           {steps.map((_, index) => (
             <button

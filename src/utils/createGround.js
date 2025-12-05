@@ -1,9 +1,6 @@
 import * as THREE from "three";
 import { GROUND_CONFIG, MATERIALS_CONFIG } from "../config/sceneConfig";
 
-/**
- * Crea una textura procedural con ruido para simular variación en el césped
- */
 let cachedGrassTexture = null;
 
 const createGrassTexture = () => {
@@ -16,11 +13,9 @@ const createGrassTexture = () => {
   canvas.height = textureSize;
   const ctx = canvas.getContext("2d");
 
-  // Color base para césped
   ctx.fillStyle = "#82B14E";
   ctx.fillRect(0, 0, textureSize, textureSize);
 
-  // Añadir variación con noise (simple y rápido)
   const imageData = ctx.getImageData(0, 0, textureSize, textureSize);
   const data = imageData.data;
 
@@ -42,10 +37,6 @@ const createGrassTexture = () => {
   return cachedGrassTexture;
 };
 
-/**
- * Crea el terreno/suelo de la escena
- * @returns {THREE.Mesh} El mesh del suelo configurado
- */
 export const createGround = () => {
   const geometry = new THREE.PlaneGeometry(
     GROUND_CONFIG.size,

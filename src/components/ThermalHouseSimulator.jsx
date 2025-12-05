@@ -1,5 +1,4 @@
 import React, { useEffect, useRef, useState } from "react";
-import * as THREE from "three";
 import Canvas3D from "./Canvas3D";
 import ControlPanel from "./ControlPanel";
 import MetricsBar from "./MetricsBar";
@@ -7,15 +6,15 @@ import ProjectHeader from "./ProjectHeader";
 import ContextMenu from "./ContextMenu";
 import AlertNotification from "./AlertNotification";
 import Tutorial from "./Tutorial";
+import { TREE_POSITIONS, UI_CONFIG, HOUSE_CONFIG } from "../config/sceneConfig";
+
+// Hooks
 import { useThreeScene } from "../hooks/useThreeScene";
 import { useLighting } from "../hooks/useLighting";
 import { usePostProcessing } from "../hooks/usePostProcessing";
 import { useWindowResize } from "../hooks/useWindowResize";
 import { useAnimationLoop } from "../hooks/useAnimationLoop";
 import useEntities from "../hooks/useEntities";
-import { createGround } from "../utils/createGround";
-import { createTrees } from "../utils/createTree";
-import { createHouse } from "../utils/createHouse";
 import { useSceneInteraction } from "../hooks/useSceneInteraction";
 
 // Simulation
@@ -28,15 +27,12 @@ import { Window, applyWindowCutouts } from "../entities/Window";
 import { Heater } from "../entities/Heater";
 import { AirConditioner } from "../entities/AirConditioner";
 
-import {
-  updateDoorPosition,
-  snapToGrid,
-  updateWindowPosition,
-} from "../utils/entityUtils";
-
+// Utils
 import { disposeObject } from "../utils/disposeUtils";
-import { TREE_POSITIONS, UI_CONFIG, HOUSE_CONFIG } from "../config/sceneConfig";
 import { validateCandidate } from "../utils/entityCollision";
+import { createGround } from "../utils/createGround";
+import { createTrees } from "../utils/createTree";
+import { createHouse } from "../utils/createHouse";
 
 const ThermalHouseSimulator = () => {
   const containerRef = useRef(null);
@@ -72,12 +68,11 @@ const ThermalHouseSimulator = () => {
     }
   }, []);
 
-  // Alert system helper - prevents duplicate alerts within 1 second
+  // Sistema de alertas
   const showAlert = React.useCallback((type, message, duration = 3000) => {
     const now = Date.now();
     const lastAlert = lastAlertRef.current;
 
-    // Skip if same message within 1 second
     if (lastAlert.message === message && now - lastAlert.time < 1000) {
       return;
     }
@@ -97,8 +92,6 @@ const ThermalHouseSimulator = () => {
   const composer = usePostProcessing(renderer, scene, camera);
   useWindowResize(camera, renderer, composer, containerRef);
 
-  // Door state previously provided by useDoors wrapper
-
   const {
     items: doors,
     addItem: addDoor,
@@ -116,7 +109,7 @@ const ThermalHouseSimulator = () => {
     showAlert,
   });
 
-  // Windows
+  // Ventanas
   const {
     items: windows,
     addItem: addWindow,
@@ -149,7 +142,7 @@ const ThermalHouseSimulator = () => {
     showAlert,
   });
 
-  // Hook para gestionar aires acondicionados (wall-mounted)
+  // Hook para gestionar aires acondicionados (montados en pared)
   const {
     items: acs,
     addItem: addAirConditioner,
@@ -207,9 +200,7 @@ const ThermalHouseSimulator = () => {
           }
           if (count > 0) setAvgInternalTemp(sum / count);
         }
-      } catch (e) {
-        // ignore errors calculating average
-      }
+      } catch (e) {}
     },
     [
       tempExterna,
@@ -225,13 +216,9 @@ const ThermalHouseSimulator = () => {
 
   useAnimationLoop(composer, handleFrame);
 
-  // Inicializar Grid y Partículas
   useEffect(() => {
     if (!scene) return;
 
-    // Crear Grid
-    // Definimos el área: -15 a 15 en X, -10 a 10 en Z
-    // Densidad: variable (1 a 4)
     const grid = new ThermalGrid(-15, 15, -10, 10, gridDensity);
     gridRef.current = grid;
 
@@ -239,7 +226,7 @@ const ThermalHouseSimulator = () => {
     const view = new ThermalParticlesView(grid);
     particlesViewRef.current = view;
     scene.add(view.mesh);
-    // Ensure the newly created particle mesh respects the current visibility setting
+    // Asegurar que el mesh de partículas respete la visibilidad actual
     if (view.mesh) view.mesh.visible = !!showGrid;
 
     return () => {
@@ -248,9 +235,9 @@ const ThermalHouseSimulator = () => {
         view.dispose();
       }
     };
-  }, [scene, gridDensity]); // Re-create when density changes
+  }, [scene, gridDensity]); // Re-crear cuando cambia la densidad
 
-  // If the external/internal sliders change, reset the thermal grid state
+  // Si cambian los sliders externos/internos, reiniciar el estado del grid térmico
   useEffect(() => {
     if (gridRef.current) {
       try {
@@ -263,19 +250,16 @@ const ThermalHouseSimulator = () => {
       try {
         particlesViewRef.current.update();
       } catch (e) {
-        // ignore
+        // ignorar
       }
     }
   }, [tempExterna, tempInterna]);
 
-  // Toggle visibility
   useEffect(() => {
     if (particlesViewRef.current && particlesViewRef.current.mesh) {
       particlesViewRef.current.mesh.visible = showGrid;
     }
   }, [showGrid]);
-
-  // Door state previously provided by useDoors wrapper
 
   // Inicializar la escena con objetos 3D
   useEffect(() => {
@@ -298,9 +282,7 @@ const ThermalHouseSimulator = () => {
     }
     house.markers.forEach((marker) => scene.add(marker));
 
-    // Cleanup
     return () => {
-      // Remove from scene if present
       try {
         if (ground) scene.remove(ground);
         trees.forEach((tree) => scene.remove(tree));
@@ -318,8 +300,6 @@ const ThermalHouseSimulator = () => {
         if (house.floor) disposeObject(house.floor);
         if (house.walls) disposeObject(house.walls);
       } catch (e) {
-        // Evitar romper el unmount por cualquier error de limpieza
-        // eslint-disable-next-line no-console
         console.warn("Cleanup error:", e);
       }
     };
@@ -359,30 +339,6 @@ const ThermalHouseSimulator = () => {
       },
     },
   });
-
-  // Manejar reconstrucción de paredes con cortes de puertas
-  const handleRebuildWalls = () => {
-    if (!scene || !wallsMeshRef) return;
-
-    // Remover paredes antiguas
-    scene.remove(wallsMeshRef);
-    disposeObject(wallsMeshRef);
-
-    // Crear paredes nuevas
-    const house = createHouse();
-    let newWalls = house.walls;
-    if (doors && doors.length > 0) {
-      newWalls = applyDoorCutouts(newWalls, doors);
-    }
-    if (windows && windows.length > 0) {
-      newWalls = applyWindowCutouts(newWalls, windows);
-    }
-    // AC cutouts disabled: do not modify walls for aircons
-
-    // Añadir a la escena
-    scene.add(newWalls);
-    setWallsMeshRef(newWalls);
-  };
 
   // Manejar selección de componente desde el menú contextual
   const handleSelectComponent = (componentType) => {
@@ -436,7 +392,9 @@ const ThermalHouseSimulator = () => {
     if (!strategy) return;
 
     if (strategy.checkFloor && !contextMenu.floorPosition) {
-      console.warn("No floor position available for heater placement");
+      console.warn(
+        "No hay posición de suelo disponible para colocar el calefactor"
+      );
       return;
     }
 
@@ -475,33 +433,22 @@ const ThermalHouseSimulator = () => {
     setContextMenu(null);
   };
 
-  // Reconstruir paredes automáticamente cuando cambian las puertas
   useEffect(() => {
-    // If a user is actively dragging an entity, skip automatic rebuilds
-    // so preview moves don't trigger CSG cut operations. The drag handler
-    // already manages a temporary wall mesh while dragging.
     if (!scene || !wallsMeshRef) return;
     if (draggedDoor && draggedDoor.userData?.isDragging) return;
 
-    // Remover paredes antiguas
     scene.remove(wallsMeshRef);
     disposeObject(wallsMeshRef);
 
-    // Crear paredes nuevas
     const house = createHouse();
 
-    // Si hay puertas o ventanas, aplicar cortes CSG
     let newWalls = house.walls;
     if (doors.length > 0) {
       newWalls = applyDoorCutouts(newWalls, doors);
     }
     if (windows && windows.length > 0) {
-      // aplicar cortes de ventanas sobre el resultado
       newWalls = applyWindowCutouts(newWalls, windows);
     }
-    // AC cutouts disabled: do not modify walls for aircons
-
-    // Añadir a la escena
     scene.add(newWalls);
     setWallsMeshRef(newWalls);
   }, [doors, windows, acs, scene]);
@@ -518,7 +465,6 @@ const ThermalHouseSimulator = () => {
         position: "fixed",
         top: 0,
         left: 0,
-        // Inyectar variables CSS para mantener una sola fuente de verdad
         ["--side-panel-width"]: `${UI_CONFIG.sidePanel.width}px`,
         ["--footer-height"]: `${UI_CONFIG.footer.height}px`,
       }}
@@ -577,7 +523,7 @@ const ThermalHouseSimulator = () => {
         isDarkMode={isDarkMode}
       />
 
-      {/* Alert notifications */}
+      {/* Notificaciones de alerta */}
       <div
         style={{
           position: "fixed",

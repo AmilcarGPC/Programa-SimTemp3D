@@ -74,7 +74,7 @@ export const useEntities = (scene, options = {}) => {
         );
       if (obj && typeof obj.toggle === "function") {
         obj.toggle();
-        // Sync state after toggle
+        // Sincronizar estado después de alternar
         setItems((prev) =>
           prev.map((item) => (item.id === id ? toStateInfo(obj) : item))
         );

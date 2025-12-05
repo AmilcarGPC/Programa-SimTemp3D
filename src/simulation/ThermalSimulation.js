@@ -59,7 +59,7 @@ export class ThermalSimulation {
 export const ThermalDiffusivity = {
   AIR: 0.00002, // 2.0e-5 m²/s
   WATER: 0.000143, // 1.43e-4 m²/s
-  CONCRETE: 0.0000005, // 5e-7 m²/s (approx)
-  WOOD: 0.00000009, // 9e-8 m²/s (approx)
+  CONCRETE: 0.0000005, // 5e-7 m²/s (aprox)
+  WOOD: 0.00000009, // 9e-8 m²/s (aprox)
   STEEL: 0.000012, // 1.2e-5 m²/s
 };

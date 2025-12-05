@@ -1,9 +1,3 @@
-import * as THREE from "three";
-
-/**
- * Recorre un objeto (y sus hijos) y dispone geometrías, materiales y texturas.
- * Protege contra valores nulos y materiales en array.
- */
 export const disposeObject = (obj) => {
   if (!obj) return;
 
@@ -12,15 +6,12 @@ export const disposeObject = (obj) => {
       if (child.geometry) {
         try {
           child.geometry.dispose();
-        } catch (e) {
-          // ignore
-        }
+        } catch (e) {}
       }
 
       if (child.material) {
         const disposeMaterial = (m) => {
           try {
-            // Dispose textures attached to the material
             if (m.map) {
               m.map.dispose();
             }
@@ -47,9 +38,7 @@ export const disposeObject = (obj) => {
             }
 
             if (m.dispose) m.dispose();
-          } catch (e) {
-            // ignore individual material dispose errors
-          }
+          } catch (e) {}
         };
 
         if (Array.isArray(child.material)) {
@@ -59,16 +48,11 @@ export const disposeObject = (obj) => {
         }
       }
 
-      // Dispose textures directly attached
       if (child.texture) {
         try {
           child.texture.dispose();
-        } catch (e) {
-          // ignore
-        }
+        } catch (e) {}
       }
     });
-  } catch (e) {
-    // ignore overall traversal errors
-  }
+  } catch (e) {}
 };

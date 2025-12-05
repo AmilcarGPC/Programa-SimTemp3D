@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { HOUSE_CONFIG } from "../config/sceneConfig";
+
+// Utils
 import {
   snapToGrid,
   updateDoorPosition,
@@ -8,6 +10,8 @@ import {
 } from "../utils/entityUtils";
 import { disposeObject } from "../utils/disposeUtils";
 import { createHouse } from "../utils/createHouse";
+
+// Entities
 import { applyDoorCutouts } from "../entities/Door";
 import { applyWindowCutouts } from "../entities/Window";
 

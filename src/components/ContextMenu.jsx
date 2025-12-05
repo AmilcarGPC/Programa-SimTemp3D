@@ -1,9 +1,6 @@
 import React from "react";
 import "./ContextMenu.css";
 
-/**
- * Menú contextual que aparece al hacer clic derecho en un muro
- */
 const ContextMenu = ({
   position,
   onClose,

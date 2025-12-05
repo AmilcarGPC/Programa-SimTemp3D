@@ -1,12 +1,9 @@
 import { DOOR_CONFIG, WINDOW_CONFIG, AC_CONFIG } from "../config/entityConfig";
 import { HOUSE_CONFIG } from "../config/sceneConfig";
 
-// Normaliza la información mínima necesaria para chequear solapamientos
 const getMeta = (ent) => {
   if (!ent) return null;
 
-  // ent puede venir en dos formas: objeto de escena (userData + position)
-  // o un plain-data con { position, direction, id, type }
   const type = ent.userData?.type || ent.type || ent.type || null;
   const position = ent.position
     ? { x: ent.position.x, z: ent.position.z, y: ent.position.y }
@@ -22,7 +19,7 @@ const getMeta = (ent) => {
     id: ent.userData?.id || ent.id || ent.id,
   };
 
-  // sizes
+  // dimensiones
   if (type === "door") {
     meta.width = DOOR_CONFIG.width || 2;
     meta.height = DOOR_CONFIG.height || 2.5;
@@ -42,7 +39,6 @@ const getMeta = (ent) => {
     meta.top = meta.bottom + meta.height;
     meta.mount = "wall";
   } else if (type === "heater") {
-    // floor-mounted heater: footprint ~1x1
     meta.width = 1.0;
     meta.depth = 1.0;
     meta.half = 0.5;
@@ -61,7 +57,7 @@ const wallAxisCenter = (meta) => {
 
 // Comprueba solapamiento vertical
 const verticalOverlap = (a, b) => {
-  if (a.mount !== "wall" || b.mount !== "wall") return true; // floor vs wall handled elsewhere
+  if (a.mount !== "wall" || b.mount !== "wall") return true; // suelo vs pared manejado en otro lugar
   return !(a.top <= b.bottom || b.top <= a.bottom);
 };
 
@@ -90,7 +86,7 @@ const overlapsFloor = (a, b) => {
   return overlapX && overlapZ;
 };
 
-// Comprueba si un objeto de suelo (heater) está "en frente" de una entidad montada en pared
+// Comprueba si un objeto de suelo está en frente de una entidad montada en pared
 const isInFront = (floorMeta, wallMeta, threshold = 1.0) => {
   const halfHouse = HOUSE_CONFIG.size / 2;
   const isNS = wallMeta.direction === "north" || wallMeta.direction === "south";
@@ -120,20 +116,16 @@ export const overlaps = (entA, entB) => {
   const b = getMeta(entB);
   if (!a || !b) return false;
 
-  // floor-floor
   if (a.mount === "floor" && b.mount === "floor") return overlapsFloor(a, b);
 
-  // wall-wall
   if (a.mount === "wall" && b.mount === "wall") return overlapsWall(a, b);
 
-  // floor-wall or wall-floor: check in-front semantics
   if (a.mount === "floor" && b.mount === "wall") return isInFront(a, b);
   if (a.mount === "wall" && b.mount === "floor") return isInFront(b, a);
 
   return false;
 };
 
-// Validate candidate against an array of other entities. Returns true if no conflicts.
 export const validateCandidate = (candidate, others = []) => {
   for (let i = 0; i < others.length; i++) {
     if (overlaps(candidate, others[i])) return false;
@@ -141,7 +133,6 @@ export const validateCandidate = (candidate, others = []) => {
   return true;
 };
 
-// Enhanced validation that returns detailed error message
 export const validateCandidateWithMessage = (candidate, others = []) => {
   for (let i = 0; i < others.length; i++) {
     const other = others[i];
@@ -167,7 +158,6 @@ export const validateCandidateWithMessage = (candidate, others = []) => {
   return { valid: true, message: null };
 };
 
-// Build a flat array of other entities from a `world` descriptor (array or object with arrays)
 export const buildOthers = (world = {}, selfId = null) => {
   if (!world) return [];
   if (Array.isArray(world))

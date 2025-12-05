@@ -1,9 +1,6 @@
 import React from "react";
 import "./MetricsBar.css";
 
-/**
- * Barra inferior con leyenda de colores y temperatura interna promedio
- */
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 const toHsl = (t, min = -10, max = 45) => {

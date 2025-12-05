@@ -1,9 +1,6 @@
 import React from "react";
 import "./DoorControl.css";
 
-/**
- * Componente de control para el sistema de puertas
- */
 const DoorControl = ({
   doors,
   onToggleDoor,

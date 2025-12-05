@@ -26,7 +26,7 @@ export const HEATER_CONFIG = {
   faceCenterStep: Math.PI / 2,
 };
 
-// Door configuration (moved from sceneConfig)
+// Configuración de puerta (movido desde sceneConfig)
 export const DOOR_CONFIG = {
   width: 1.5,
   height: 2.5,
@@ -38,7 +38,7 @@ export const DOOR_CONFIG = {
   animationSpeed: 1,
 };
 
-// Window configuration (moved from sceneConfig)
+// Configuración de ventana (movido desde sceneConfig)
 export const WINDOW_CONFIG = {
   width: 2,
   height: 1.75,

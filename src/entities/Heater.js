@@ -1,6 +1,5 @@
 import * as THREE from "three";
 import { snapToGrid, isOnFloor } from "../utils/entityUtils";
-import { HOUSE_CONFIG } from "../config/sceneConfig";
 import { HEATER_CONFIG } from "../config/entityConfig";
 import { EntityBase } from "./EntityBase";
 import { validateCandidate, buildOthers } from "../utils/entityCollision";

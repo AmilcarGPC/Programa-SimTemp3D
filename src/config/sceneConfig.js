@@ -77,20 +77,20 @@ export const TREE_CONFIG = {
 // Posiciones de árboles organizadas en clusters en cada esquina.
 // Cada entrada puede incluir `scale` opcional para variar tamaño.
 export const TREE_POSITIONS = [
-  // Top-left corner cluster (closer to house corner at -5,-5)
+  // Grupo de esquina superior izquierda (cerca de la esquina de la casa en -5,-5)
   { x: -6.3, z: -4, scale: 0.5 },
   { x: -7.2, z: -5, scale: 0.85 },
   { x: -4, z: -6.5, scale: 0.6 },
 
-  // Top-right corner cluster (closer to house corner at +5,-5)
+  // Grupo de esquina superior derecha (cerca de la esquina de la casa en +5,-5)
   { x: 6.3, z: -3.7, scale: 0.4 },
   { x: 7, z: -4.8, scale: 0.9 },
 
-  // Bottom-left corner cluster (closer to house corner at -5,+5)
+  // Grupo de esquina inferior izquierda (cerca de la esquina de la casa en -5,+5)
   { x: -6.2, z: 4, scale: 0.6 },
   { x: -7, z: 5.5, scale: 0.95 },
 
-  // Bottom-right corner cluster (closer to house corner at +5,+5) - smaller trees
+  // Grupo de esquina inferior derecha (cerca de la esquina de la casa en +5,+5) - árboles más pequeños
   { x: 4.5, z: 6.3, scale: 0.5 },
   { x: 6.5, z: 6.5, scale: 0.67 },
 ];

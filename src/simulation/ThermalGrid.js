@@ -297,7 +297,7 @@ export class ThermalGrid {
     }
   }
 
-  // Reset the grid particles to given external/internal temperatures
+  // Reiniciar las partículas de la cuadrícula a las temperaturas externas/internas dadas
   reset(initialExternal, initialInternal) {
     const houseHalfSize = HOUSE_CONFIG.size / 2;
     const wallThickness = HOUSE_CONFIG.wallThickness;

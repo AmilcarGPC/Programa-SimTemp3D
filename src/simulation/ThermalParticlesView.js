@@ -12,10 +12,10 @@ export class ThermalParticlesView {
     const particles = this.grid.particles;
     const count = particles.length;
 
-    // Calculate size based on density to avoid overlap
-    // Step size is 1 / density
-    // We want diameter to be slightly less than step
-    // Original radius factor 0.4. Reduced by 30% -> 0.28
+    // Calcular tamaño basado en densidad para evitar solapamiento
+    // El tamaño del paso es 1 / densidad
+    // Queremos que el diámetro sea ligeramente menor que el paso
+    // Factor de radio original 0.4. Reducido en 30% -> 0.28
     const step = 1 / this.grid.density;
     const radius = step * 0.28;
 

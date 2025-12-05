@@ -2,9 +2,6 @@ import React from "react";
 import { UI_CONFIG } from "../config/sceneConfig";
 import "./ControlPanel.css";
 
-/**
- * Panel de control lateral con controles de temperatura y puertas
- */
 const ControlPanel = ({
   tempExterna,
   tempInterna,
@@ -117,8 +114,6 @@ const ControlPanel = ({
         />
       </div>
 
-      {/* Se eliminan controles de puerta/ventana: gestión externa */}
-
       {/* Botones de acción */}
       <div className="control-panel__actions">
         <button
@@ -146,8 +141,6 @@ const ControlPanel = ({
           </button>
         )}
       </div>
-
-      {/* Panel de información (eliminada la línea 'Día 1') */}
     </div>
   );
 };

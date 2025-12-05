@@ -1,15 +1,6 @@
 import { useEffect } from "react";
 import "./AlertNotification.css";
 
-/**
- * AlertNotification: Componente de notificación temporal
- *
- * @param {string} type - 'error' | 'warning' | 'info' | 'success'
- * @param {string} message - Mensaje a mostrar
- * @param {number} duration - Duración en ms (default 3000)
- * @param {function} onClose - Callback al cerrar
- * @param {boolean} isDarkMode - Tema actual
- */
 const AlertNotification = ({
   type = "info",
   message,
@@ -82,7 +73,7 @@ const AlertNotification = ({
             />
           </svg>
         );
-      default: // info
+      default:
         return (
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
             <circle

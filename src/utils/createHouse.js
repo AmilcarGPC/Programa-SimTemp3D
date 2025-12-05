@@ -2,11 +2,6 @@ import * as THREE from "three";
 import { SUBTRACTION, Brush, Evaluator } from "three-bvh-csg";
 import { HOUSE_CONFIG, MATERIALS_CONFIG } from "../config/sceneConfig";
 
-/**
- * Crea el material para las paredes con el shader personalizado.
- * Se parametra con la altura de pared para evitar "magic numbers" en el shader.
- * @export Para uso en createDoor.js al reconstruir materiales post-CSG
- */
 export const createWallMaterial = (wallHeight) => {
   const wallMaterial = new THREE.MeshStandardMaterial({
     roughness: MATERIALS_CONFIG.wall.roughness,
@@ -53,7 +48,6 @@ export const createWallMaterial = (wallHeight) => {
        varying vec3 vWorldNormal;`
     );
 
-    // Insertar thresholds calculadas en el shader como literales
     shader.fragmentShader = shader.fragmentShader.replace(
       "#include <color_fragment>",
       `#include <color_fragment>
@@ -76,44 +70,34 @@ export const createWallMaterial = (wallHeight) => {
   return wallMaterial;
 };
 
-/**
- * Crea el piso de la casa
- * @returns {null} El piso está integrado en las paredes
- */
 export const createFloor = () => {
-  return null; // El piso está integrado en createWalls()
+  return null;
 };
 
-/**
- * Crea las paredes huecas de la casa usando CSG con piso integrado
- * @returns {THREE.Mesh} El mesh de las paredes con piso
- */
 export const createWalls = () => {
   const evaluator = new Evaluator();
   const { size, wallThickness, wallHeight } = HOUSE_CONFIG;
   const floorThickness = 0.15;
 
-  // Cubo exterior - empieza desde y=0
+  // Cubo exterior (empieza desde y=0)
   const outerBoxGeometry = new THREE.BoxGeometry(size, wallHeight, size);
   const outerBrush = new Brush(outerBoxGeometry);
   outerBrush.position.set(0, wallHeight / 2, 0);
   outerBrush.updateMatrixWorld();
 
-  // Cubo interior - NO llega hasta el suelo, deja espacio para el piso
+  // Cubo interior, no llega hasta el suelo (deja espacio para el piso)
   const innerBoxGeometry = new THREE.BoxGeometry(
     size - wallThickness * 2,
     wallHeight + 0.1, // Ligeramente más alto para evitar artefactos en el techo
     size - wallThickness * 2
   );
+
   const innerBrush = new Brush(innerBoxGeometry);
-  // Elevar el cubo interior para dejar el piso
   innerBrush.position.set(0, wallHeight / 2 + floorThickness, 0);
   innerBrush.updateMatrixWorld();
 
-  // Realizar sustracción: exterior - interior = paredes huecas CON PISO
   const wallsResult = evaluator.evaluate(outerBrush, innerBrush, SUBTRACTION);
 
-  // Crear material de muro usando helper (usa wallHeight para thresholds)
   const wallMaterial = createWallMaterial(wallHeight);
   wallsResult.material = wallMaterial;
   wallsResult.castShadow = false;
@@ -122,11 +106,6 @@ export const createWalls = () => {
   return wallsResult;
 };
 
-/**
- * Crea marcadores invisibles en el centro de cada pared
- * Útiles para colocar ventanas/puertas en el futuro
- * @returns {Array<THREE.Mesh>} Array de marcadores
- */
 export const createWallMarkers = () => {
   const { size, wallHeight } = HOUSE_CONFIG;
   const markerGeometry = new THREE.SphereGeometry(0.3, 8, 6);
@@ -154,14 +133,10 @@ export const createWallMarkers = () => {
   });
 };
 
-/**
- * Crea la casa completa (piso + paredes + marcadores)
- * @returns {Object} Objeto con todos los componentes de la casa
- */
 export const createHouse = () => {
   return {
     floor: createFloor(),
-    walls: createWalls(), // Ahora es un Group con 4 paredes separadas
+    walls: createWalls(),
     markers: createWallMarkers(),
   };
 };

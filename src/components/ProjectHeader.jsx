@@ -1,9 +1,6 @@
 import React from "react";
 import "./ProjectHeader.css";
 
-/**
- * Header del proyecto con título y logo
- */
 const ProjectHeader = ({ isDarkMode = true }) => {
   return (
     <div
